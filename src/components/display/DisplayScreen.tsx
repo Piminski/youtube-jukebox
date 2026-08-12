@@ -25,16 +25,6 @@ async function requestFullscreen(el: HTMLElement) {
   }
 }
 
-async function exitFullscreen() {
-  const doc = document as Document & { webkitExitFullscreen?: () => Promise<void> | void };
-  try {
-    if (document.exitFullscreen && document.fullscreenElement) await document.exitFullscreen();
-    else doc.webkitExitFullscreen?.();
-  } catch {
-    /* ignore */
-  }
-}
-
 export default function DisplayScreen() {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const { settings } = useSettings();
@@ -63,11 +53,6 @@ export default function DisplayScreen() {
     }
   };
 
-  const toggleFullscreen = () => {
-    if (fullscreenElement()) void exitFullscreen();
-    else if (rootRef.current) void requestFullscreen(rootRef.current);
-  };
-
   return (
     <div ref={rootRef} className={`display-screen${isFullscreen ? " fullscreen" : ""}`}>
       {playing?.thumbnail && (
@@ -88,15 +73,7 @@ export default function DisplayScreen() {
       />
 
       <div className={`display-overlay${playing ? " playing" : ""}`}>
-        <header className="display-brand">
-          <span>YouTube Jukebox</span>
-          <span className="display-brand-actions">
-            {settings.paused && <em>Paused</em>}
-            <button type="button" className="display-fs-btn" onClick={toggleFullscreen}>
-              {isFullscreen ? "Exit fullscreen" : "Fullscreen"}
-            </button>
-          </span>
-        </header>
+        {settings.paused && <p className="display-paused">Paused</p>}
 
         <section className="display-now">
           {playing ? (
