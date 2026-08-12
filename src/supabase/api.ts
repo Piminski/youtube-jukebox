@@ -87,21 +87,35 @@ export async function addVideo(input: AddVideoInput): Promise<QueueItem> {
     .maybeSingle();
   const position = (maxRow?.position ?? 0) + 1;
 
-  const { data, error } = await sb
-    .from("queue_items")
-    .insert({
-      youtube_id: input.youtube_id,
-      title: input.title,
-      channel: input.channel ?? null,
-      thumbnail: input.thumbnail ?? null,
-      duration_sec: input.duration_sec,
-      visitor_id: input.visitor_id,
-      source: "web",
-      status: "queued",
-      position,
-    })
-    .select("*, visitor:visitors(*)")
-    .single();
+  const payload = {
+    youtube_id: input.youtube_id,
+    title: input.title,
+    channel: input.channel ?? null,
+    thumbnail: input.thumbnail ?? null,
+    duration_sec: input.duration_sec,
+    visitor_id: input.visitor_id,
+    source: "web",
+    status: "queued",
+    position,
+  };
+
+  const insert = (duration_sec: number) =>
+    sb
+      .from("queue_items")
+      .insert({ ...payload, duration_sec })
+      .select("*, visitor:visitors(*)")
+      .single();
+
+  let { data, error } = await insert(input.duration_sec);
+
+  // Legacy DB trigger still rejects duration_sec above settings.max_duration_sec.
+  // Retry with the cap so the add succeeds; playback already skips at that cap.
+  const capMatch = error?.message.match(/exceeds maximum duration of (\d+) seconds/i);
+  if (error && capMatch) {
+    const capped = Math.max(1, Math.min(input.duration_sec, Number(capMatch[1])));
+    ({ data, error } = await insert(capped));
+  }
+
   throwOnError(error);
   return data as QueueItem;
 }
