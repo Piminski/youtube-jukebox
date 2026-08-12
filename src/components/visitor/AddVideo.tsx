@@ -15,7 +15,6 @@ import type { Visitor } from "../../supabase/types";
 
 interface AddVideoProps {
   visitor: Visitor;
-  maxDurationSec: number;
   onAdded: () => void;
   onBack: () => void;
 }
@@ -32,7 +31,6 @@ function catalogPlaceholder(videoId: string): YouTubeResult {
 
 export default function AddVideo({
   visitor,
-  maxDurationSec,
   onAdded,
   onBack,
 }: AddVideoProps) {
@@ -93,7 +91,7 @@ export default function AddVideo({
         q,
         ac.signal,
         (result) => {
-          if (result.durationSec > 0 && result.durationSec <= maxDurationSec) {
+          if (result.durationSec > 0) {
             setResults((prev) =>
               prev.some((r) => r.videoId === result.videoId)
                 ? prev
@@ -118,20 +116,14 @@ export default function AddVideo({
       window.clearTimeout(handle);
       ac.abort();
     };
-  }, [query, maxDurationSec]);
+  }, [query]);
 
   const list = useMemo(() => {
     if (query.trim()) return results;
-    return catalog.filter(
-      (t) => t.durationSec === 0 || t.durationSec <= maxDurationSec,
-    );
-  }, [query, results, catalog, maxDurationSec]);
+    return catalog;
+  }, [query, results, catalog]);
 
   const choose = (track: YouTubeResult) => {
-    if (track.durationSec > maxDurationSec) {
-      setError(`Tracks must be ${fmtTime(maxDurationSec)} or shorter.`);
-      return;
-    }
     setSelected(track);
     setPreviewing(false);
     setError(null);
@@ -139,10 +131,6 @@ export default function AddVideo({
 
   const publish = async () => {
     if (!selected) return;
-    if (selected.durationSec > maxDurationSec) {
-      setError(`Tracks must be ${fmtTime(maxDurationSec)} or shorter.`);
-      return;
-    }
     setBusy(true);
     setError(null);
     try {
@@ -169,7 +157,7 @@ export default function AddVideo({
           Queue
         </button>
         <h1>Add a video</h1>
-        <p className="muted">Max length {fmtTime(maxDurationSec)}</p>
+        <p className="muted">Search YouTube or pick a track</p>
       </header>
 
       <div className="jukebox-search">
@@ -177,7 +165,7 @@ export default function AddVideo({
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search YouTube"
+          placeholder="Search YouTube or paste a link"
           aria-label="Search YouTube"
         />
         {query && (

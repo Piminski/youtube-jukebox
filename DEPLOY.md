@@ -41,8 +41,8 @@
 ### Checklist
 
 - [ ] Staff user can sign in
-- [ ] Visitor can register and add a short video
-- [ ] Over-long videos are rejected (max duration setting)
+- [ ] Visitor can register and add a video of any length
+- [ ] Admin max play duration caps how long each track plays
 - [ ] Admin can reorder / hide / delete / skip
 - [ ] Display updates within a second or two
 - [ ] Room audio plays from the admin device

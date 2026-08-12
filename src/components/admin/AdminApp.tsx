@@ -313,7 +313,7 @@ export default function AdminApp() {
               <h1>Settings</h1>
             </header>
             <label className="slider-label">
-              Max video duration ({fmtTime(settings.max_duration_sec)})
+              Max play duration ({fmtTime(settings.max_duration_sec)})
               <input
                 type="range"
                 min={60}
@@ -343,8 +343,8 @@ export default function AdminApp() {
               />
             </label>
             <p className="muted">
-              Visitors cannot add videos longer than this. Playing tracks are also
-              capped to this length.
+              Any video can be added. Playback stops at this length, then the
+              queue advances.
             </p>
           </section>
         )}

@@ -25,7 +25,6 @@ export default function VisitorApp() {
     return (
       <AddVideo
         visitor={visitor}
-        maxDurationSec={settings.max_duration_sec}
         onBack={() => setView("queue")}
         onAdded={() => {
           void refresh();

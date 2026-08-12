@@ -29,6 +29,62 @@ export function youtubeConfigured(): boolean {
 
 export class YouTubeError extends Error {}
 
+function youtubeV3Url(path: string, params: Record<string, string>): URL {
+  const base = import.meta.env.DEV
+    ? "/api/youtube"
+    : "https://www.googleapis.com/youtube/v3";
+  const url = new URL(`${base}/${path}`, window.location.origin);
+  url.search = new URLSearchParams({ ...params, key: API_KEY! }).toString();
+  return url;
+}
+
+function extractYoutubeVideoId(input: string): string | null {
+  const q = input.trim();
+  const m =
+    /(?:youtube\.com\/watch\?(?:.*&)?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/shorts\/)([\w-]{11})/.exec(
+      q,
+    );
+  return m?.[1] ?? null;
+}
+
+async function throwYouTubeHttpError(
+  res: Response,
+  fallback: string,
+): Promise<never> {
+  let reason = "";
+  let message = "";
+  try {
+    const body = (await res.json()) as {
+      error?: {
+        message?: string;
+        errors?: { reason?: string }[];
+        details?: { reason?: string }[];
+      };
+    };
+    reason =
+      body.error?.errors?.[0]?.reason ?? body.error?.details?.[0]?.reason ?? "";
+    message = body.error?.message ?? "";
+  } catch {
+    /* ignore non-JSON bodies */
+  }
+
+  if (reason === "quotaExceeded" || reason === "dailyLimitExceeded") {
+    throw new YouTubeError("YouTube search quota reached. Try again later.");
+  }
+  if (
+    reason === "API_KEY_HTTP_REFERRER_BLOCKED" ||
+    /referer/i.test(message)
+  ) {
+    throw new YouTubeError(
+      "This page origin isn’t allowed on the YouTube API key. Add it as an HTTP referrer in Google Cloud Console.",
+    );
+  }
+  if (reason === "accessNotConfigured") {
+    throw new YouTubeError("YouTube Data API is not enabled for this API key.");
+  }
+  throw new YouTubeError(message || fallback);
+}
+
 // Parse an ISO-8601 duration (e.g. "PT3M52S") into seconds.
 function parseIsoDuration(iso: string): number {
   const m = /PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/.exec(iso);
@@ -77,23 +133,26 @@ export async function searchYouTube(
     );
   }
 
-  const searchUrl = new URL("https://www.googleapis.com/youtube/v3/search");
-  searchUrl.search = new URLSearchParams({
+  const pastedId = extractYoutubeVideoId(q);
+  if (pastedId) {
+    return fetchYouTubeVideos([pastedId], signal, onResult);
+  }
+
+  const searchUrl = youtubeV3Url("search", {
     part: "snippet",
     type: "video",
     videoEmbeddable: "true",
     videoSyndicated: "true",
     maxResults: "40",
     q,
-    key: API_KEY,
-  }).toString();
+  });
 
   const res = await fetch(searchUrl, { signal });
   if (!res.ok) {
-    if (res.status === 403) {
-      throw new YouTubeError("YouTube search quota reached. Try again later.");
-    }
-    throw new YouTubeError("YouTube search failed. Check the connection and try again.");
+    await throwYouTubeHttpError(
+      res,
+      "YouTube search failed. Check the connection and try again.",
+    );
   }
   const data = (await res.json()) as {
     items?: {
@@ -109,12 +168,10 @@ export async function searchYouTube(
   const ids = items.map((it) => it.id.videoId).filter(Boolean);
   if (ids.length === 0) return 0;
 
-  const detailUrl = new URL("https://www.googleapis.com/youtube/v3/videos");
-  detailUrl.search = new URLSearchParams({
+  const detailUrl = youtubeV3Url("videos", {
     part: "contentDetails,status,player",
     id: ids.join(","),
-    key: API_KEY,
-  }).toString();
+  });
   const detailRes = await fetch(detailUrl, { signal });
   if (!detailRes.ok) return 0;
 
@@ -196,18 +253,16 @@ async function fetchVideoDetailsPage(
   ids: string[],
   signal?: AbortSignal,
 ): Promise<Map<string, VideoDetailItem>> {
-  const detailUrl = new URL("https://www.googleapis.com/youtube/v3/videos");
-  detailUrl.search = new URLSearchParams({
+  const detailUrl = youtubeV3Url("videos", {
     part: "snippet,contentDetails,status,player",
     id: ids.join(","),
-    key: API_KEY!,
-  }).toString();
+  });
   const detailRes = await fetch(detailUrl, { signal });
   if (!detailRes.ok) {
-    if (detailRes.status === 403) {
-      throw new YouTubeError("YouTube API quota reached. Try again later.");
-    }
-    throw new YouTubeError("Couldn't load tracks. Check the connection and try again.");
+    await throwYouTubeHttpError(
+      detailRes,
+      "Couldn't load tracks. Check the connection and try again.",
+    );
   }
 
   const detail = (await detailRes.json()) as { items?: VideoDetailItem[] };

@@ -13,7 +13,7 @@ removed and `localStorage` replaced by **Supabase Realtime**.
 | URL | Role |
 | --- | --- |
 | `/` | Visitor — register, view queue, add videos |
-| `/admin` | Staff — reorder, hide, delete, pause/skip, max duration, playback host |
+| `/admin` | Staff — reorder, hide, delete, pause/skip, max play duration, playback host |
 | `/display` | Public screen — now playing + up next |
 
 The **admin device** is the audio host (YouTube IFrame). Open `/display` fullscreen

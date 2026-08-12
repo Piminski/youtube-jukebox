@@ -116,7 +116,7 @@ export function useQueue() {
   return { items, playing, queued, hidden, active, error, loading, refresh, setItems };
 }
 
-/** Playable seconds for a queue item given current max duration setting. */
+/** Playable seconds for a queue item, capped by the admin max play duration. */
 export function playableDuration(item: QueueItem, maxDurationSec: number): number {
   return Math.min(item.duration_sec, maxDurationSec);
 }

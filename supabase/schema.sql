@@ -39,6 +39,7 @@ create index if not exists queue_items_active_idx
 -- Single-row settings
 create table if not exists public.settings (
   id int primary key default 1 check (id = 1),
+  -- Cap on how long a queued video actually plays (not a limit on adding)
   max_duration_sec int not null default 360 check (max_duration_sec between 30 and 1800),
   paused boolean not null default false,
   volume real not null default 0.85 check (volume >= 0 and volume <= 1),
@@ -48,22 +49,17 @@ create table if not exists public.settings (
 insert into public.settings (id) values (1)
 on conflict (id) do nothing;
 
--- Enforce max duration on visitor inserts
+-- Assign position and restrict visitor inserts to queued status
 create or replace function public.enforce_queue_insert()
 returns trigger
 language plpgsql
 as $$
 declare
-  max_sec int;
   next_pos int;
 begin
   if tg_op = 'INSERT' then
     if new.status is distinct from 'queued' then
       raise exception 'Visitors may only insert queued items';
-    end if;
-    select max_duration_sec into max_sec from public.settings where id = 1;
-    if new.duration_sec > coalesce(max_sec, 360) then
-      raise exception 'Video exceeds maximum duration of % seconds', max_sec;
     end if;
     if new.position is null then
       select coalesce(max(position), 0) + 1 into next_pos from public.queue_items;
