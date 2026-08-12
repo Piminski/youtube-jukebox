@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import JukeboxPlayer from "../admin/JukeboxPlayer";
 import { useQueue, useSettings, playableDuration } from "../../supabase/hooks";
 import { fmtTime } from "../../lib/format";
@@ -8,27 +8,68 @@ function elapsedSeconds(startedAt: string | null): number {
   return Math.max(0, (Date.now() - new Date(startedAt).getTime()) / 1000);
 }
 
+function fullscreenElement(): Element | null {
+  const doc = document as Document & { webkitFullscreenElement?: Element | null };
+  return document.fullscreenElement ?? doc.webkitFullscreenElement ?? null;
+}
+
+async function requestFullscreen(el: HTMLElement) {
+  const node = el as HTMLElement & {
+    webkitRequestFullscreen?: () => Promise<void> | void;
+  };
+  try {
+    if (el.requestFullscreen) await el.requestFullscreen();
+    else node.webkitRequestFullscreen?.();
+  } catch {
+    /* unsupported or dismissed */
+  }
+}
+
+async function exitFullscreen() {
+  const doc = document as Document & { webkitExitFullscreen?: () => Promise<void> | void };
+  try {
+    if (document.exitFullscreen && document.fullscreenElement) await document.exitFullscreen();
+    else doc.webkitExitFullscreen?.();
+  } catch {
+    /* ignore */
+  }
+}
+
 export default function DisplayScreen() {
+  const rootRef = useRef<HTMLDivElement | null>(null);
   const { settings } = useSettings();
   const { playing, queued, loading } = useQueue();
   const [audioUnlocked, setAudioUnlocked] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const limit = playing ? playableDuration(playing, settings.max_duration_sec) : 0;
   const startSeconds = playing
     ? Math.min(Math.max(0, limit - 0.5), elapsedSeconds(playing.started_at))
     : 0;
 
   useEffect(() => {
-    const unlock = () => setAudioUnlocked(true);
-    window.addEventListener("pointerdown", unlock, { once: true });
-    window.addEventListener("keydown", unlock, { once: true });
+    const sync = () => setIsFullscreen(Boolean(fullscreenElement()));
+    document.addEventListener("fullscreenchange", sync);
+    document.addEventListener("webkitfullscreenchange", sync);
     return () => {
-      window.removeEventListener("pointerdown", unlock);
-      window.removeEventListener("keydown", unlock);
+      document.removeEventListener("fullscreenchange", sync);
+      document.removeEventListener("webkitfullscreenchange", sync);
     };
   }, []);
 
+  const startShow = () => {
+    setAudioUnlocked(true);
+    if (rootRef.current && !fullscreenElement()) {
+      void requestFullscreen(rootRef.current);
+    }
+  };
+
+  const toggleFullscreen = () => {
+    if (fullscreenElement()) void exitFullscreen();
+    else if (rootRef.current) void requestFullscreen(rootRef.current);
+  };
+
   return (
-    <div className="display-screen">
+    <div ref={rootRef} className={`display-screen${isFullscreen ? " fullscreen" : ""}`}>
       {playing?.thumbnail && (
         <div
           className="display-bg"
@@ -49,7 +90,12 @@ export default function DisplayScreen() {
       <div className={`display-overlay${playing ? " playing" : ""}`}>
         <header className="display-brand">
           <span>YouTube Jukebox</span>
-          {settings.paused && <em>Paused</em>}
+          <span className="display-brand-actions">
+            {settings.paused && <em>Paused</em>}
+            <button type="button" className="display-fs-btn" onClick={toggleFullscreen}>
+              {isFullscreen ? "Exit fullscreen" : "Fullscreen"}
+            </button>
+          </span>
         </header>
 
         <section className="display-now">
@@ -90,8 +136,8 @@ export default function DisplayScreen() {
       </div>
 
       {!audioUnlocked && (
-        <button type="button" className="display-unlock" onClick={() => setAudioUnlocked(true)}>
-          Click to start audio
+        <button type="button" className="display-unlock" onClick={startShow}>
+          Click to start fullscreen audio
         </button>
       )}
     </div>

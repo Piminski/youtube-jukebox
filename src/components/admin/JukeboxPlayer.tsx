@@ -78,6 +78,7 @@ export default function JukeboxPlayer({
           rel: 0,
           playsinline: 1,
           iv_load_policy: 3,
+          fs: 1,
           // Always start muted so the picture can autoplay; sound unlocks on gesture.
           mute: 1,
           origin: window.location.origin,
@@ -90,6 +91,12 @@ export default function JukeboxPlayer({
             try {
               p.mute();
               p.setVolume(Math.round(volumeRef.current * 100));
+              const iframe = hostRef.current?.querySelector("iframe");
+              iframe?.setAttribute("allowfullscreen", "true");
+              iframe?.setAttribute(
+                "allow",
+                "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen",
+              );
             } catch {
               /* ignore */
             }
