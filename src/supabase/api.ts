@@ -3,6 +3,10 @@ import type { AddVideoInput, QueueItem, Settings, Visitor } from "./types";
 
 const VISITOR_KEY = "jukebox.visitor";
 
+function throwOnError(error: { message: string } | null): asserts error is null {
+  if (error) throw new Error(error.message);
+}
+
 export function loadLocalVisitor(): Visitor | null {
   try {
     const raw = localStorage.getItem(VISITOR_KEY);
@@ -35,7 +39,7 @@ export async function registerVisitor(name: string, email: string): Promise<Visi
     .insert({ name: name.trim(), email: email.trim().toLowerCase() })
     .select("*")
     .single();
-  if (error) throw error;
+  throwOnError(error);
   const visitor = data as Visitor;
   saveLocalVisitor(visitor);
   return visitor;
@@ -44,7 +48,7 @@ export async function registerVisitor(name: string, email: string): Promise<Visi
 export async function fetchSettings(): Promise<Settings> {
   const sb = getSupabase();
   const { data, error } = await sb.from("settings").select("*").eq("id", 1).single();
-  if (error) throw error;
+  throwOnError(error);
   return data as Settings;
 }
 
@@ -58,7 +62,7 @@ export async function updateSettings(
     .eq("id", 1)
     .select("*")
     .single();
-  if (error) throw error;
+  throwOnError(error);
   return data as Settings;
 }
 
@@ -69,7 +73,7 @@ export async function fetchQueue(): Promise<QueueItem[]> {
     .select("*, visitor:visitors(*)")
     .in("status", ["queued", "playing", "hidden"])
     .order("position", { ascending: true });
-  if (error) throw error;
+  throwOnError(error);
   return (data ?? []) as QueueItem[];
 }
 
@@ -98,7 +102,7 @@ export async function addVideo(input: AddVideoInput): Promise<QueueItem> {
     })
     .select("*, visitor:visitors(*)")
     .single();
-  if (error) throw error;
+  throwOnError(error);
   return data as QueueItem;
 }
 
@@ -112,7 +116,7 @@ export async function setItemStatus(
     .from("queue_items")
     .update({ status, ...extra })
     .eq("id", id);
-  if (error) throw error;
+  throwOnError(error);
 }
 
 export async function reorderQueue(orderedIds: string[]): Promise<void> {
@@ -123,7 +127,7 @@ export async function reorderQueue(orderedIds: string[]): Promise<void> {
       .from("queue_items")
       .update({ position: i + 1 })
       .eq("id", orderedIds[i]);
-    if (error) throw error;
+    throwOnError(error);
   }
 }
 
@@ -141,7 +145,7 @@ export async function advanceQueue(currentId: string | null): Promise<void> {
     .order("position", { ascending: true })
     .limit(1)
     .maybeSingle();
-  if (error) throw error;
+  throwOnError(error);
   if (next) {
     await setItemStatus(next.id, "playing", { started_at: new Date().toISOString() });
   }
@@ -176,7 +180,7 @@ export async function ensurePlaying(): Promise<void> {
 export async function adminSignIn(email: string, password: string): Promise<void> {
   const sb = getSupabase();
   const { error } = await sb.auth.signInWithPassword({ email, password });
-  if (error) throw error;
+  throwOnError(error);
 }
 
 export async function adminSignOut(): Promise<void> {
