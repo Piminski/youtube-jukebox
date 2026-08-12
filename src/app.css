@@ -423,9 +423,20 @@ code {
 .admin-shell {
   display: grid;
   grid-template-columns: 220px 1fr;
+  grid-template-areas: "nav main";
   min-height: 100dvh;
   position: relative;
   z-index: 1;
+}
+
+.admin-shell > .jukebox-player {
+  grid-area: main;
+}
+
+.admin-shell > .jukebox-player.stage {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
 }
 
 .admin-login {
@@ -433,12 +444,15 @@ code {
 }
 
 .admin-nav {
+  grid-area: nav;
   display: flex;
   flex-direction: column;
   gap: 6px;
   padding: 20px 14px;
   border-right: 1px solid var(--line);
-  background: color-mix(in srgb, var(--bg-2) 90%, transparent);
+  background: var(--bg-2);
+  z-index: 2;
+  position: relative;
 }
 
 .admin-brand {
@@ -472,9 +486,21 @@ code {
 }
 
 .admin-main {
+  grid-area: main;
+  position: relative;
+  z-index: 1;
   padding: 24px;
   max-height: 100dvh;
   overflow: auto;
+}
+
+.admin-shell.playback .admin-main {
+  background: linear-gradient(
+    180deg,
+    rgba(18, 17, 15, 0.62) 0%,
+    rgba(18, 17, 15, 0.28) 45%,
+    rgba(18, 17, 15, 0.72) 100%
+  );
 }
 
 .admin-panel-head {
@@ -585,6 +611,48 @@ code {
     rgba(0, 0, 0, 0.2) 40%,
     rgba(0, 0, 0, 0.75) 100%
   );
+  pointer-events: none;
+}
+
+.display-overlay.playing {
+  background: linear-gradient(
+    180deg,
+    rgba(0, 0, 0, 0.5) 0%,
+    rgba(0, 0, 0, 0.04) 28%,
+    rgba(0, 0, 0, 0.04) 58%,
+    rgba(0, 0, 0, 0.78) 100%
+  );
+}
+
+.display-unlock {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  border: 0;
+  margin: 0;
+  padding: 0;
+  cursor: pointer;
+  color: #fff;
+  font: inherit;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.display-screen .jukebox-player.stage {
+  z-index: 1;
+  overflow: hidden;
+}
+
+.display-screen .jukebox-player-host {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 177.78vh;
+  height: 100vh;
+  min-width: 100%;
+  min-height: 56.25vw;
+  transform: translate(-50%, -50%);
 }
 
 .display-brand {
@@ -648,6 +716,9 @@ code {
 @media (max-width: 860px) {
   .admin-shell {
     grid-template-columns: 1fr;
+    grid-template-areas:
+      "nav"
+      "main";
   }
 
   .admin-nav {

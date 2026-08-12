@@ -2,35 +2,62 @@ import { useEffect, useRef } from "react";
 import { loadYouTubeIframeApi } from "../../youtube";
 
 interface JukeboxPlayerProps {
-  videoId: string | null; // current jukebox track, or null for non-jukebox
+  videoId: string | null; // current jukebox track, or null for idle
   volume: number; // 0..1, mirrors the in-store master volume
-  stage: boolean; // full-bleed video (visualizer) vs hidden audio-only
+  stage: boolean; // full-bleed video vs hidden audio-only
   paused?: boolean;
+  muted?: boolean; // admin preview: picture only; display unmutes after a gesture
+  startSeconds?: number; // seek on load so a late display matches admin
+  trackKey?: string; // reload when the queue item changes, even if youtube_id repeats
 }
 
-// The single in-store YouTube player. It lives above the admin tabs so the
-// room's music keeps playing as staff navigate, and is shown full-bleed only
-// when the Visualizer is projecting a jukebox track.
-export default function JukeboxPlayer({ videoId, volume, stage, paused = false }: JukeboxPlayerProps) {
+type YtPlayer = {
+  setVolume: (v: number) => void;
+  mute: () => void;
+  unMute: () => void;
+  loadVideoById: (opts: { videoId: string; startSeconds?: number } | string) => void;
+  playVideo: () => void;
+  pauseVideo: () => void;
+  stopVideo: () => void;
+  destroy: () => void;
+};
+
+function applyMute(player: YtPlayer, muted: boolean) {
+  if (muted) player.mute();
+  else player.unMute();
+}
+
+function loadTrack(player: YtPlayer, videoId: string, startSeconds: number) {
+  player.loadVideoById({
+    videoId,
+    startSeconds: Number.isFinite(startSeconds) ? Math.max(0, startSeconds) : 0,
+  });
+}
+
+// YouTube IFrame used by /display (room audio + picture) and admin (muted preview).
+export default function JukeboxPlayer({
+  videoId,
+  volume,
+  stage,
+  paused = false,
+  muted = false,
+  startSeconds = 0,
+  trackKey,
+}: JukeboxPlayerProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
-  // YT.Player instance (untyped — the IFrame API ships no bundled types).
-  const playerRef = useRef<{
-    setVolume: (v: number) => void;
-    loadVideoById: (id: string) => void;
-    playVideo: () => void;
-    pauseVideo: () => void;
-    stopVideo: () => void;
-    destroy: () => void;
-  } | null>(null);
+  const playerRef = useRef<YtPlayer | null>(null);
   const readyRef = useRef(false);
   const pendingRef = useRef<string | null>(null);
-  // Latest values for the gesture-unlock handler to read without re-binding.
   const volumeRef = useRef(volume);
   volumeRef.current = volume;
   const videoIdRef = useRef<string | null>(videoId);
   videoIdRef.current = videoId;
   const pausedRef = useRef(paused);
   pausedRef.current = paused;
+  const mutedRef = useRef(muted);
+  mutedRef.current = muted;
+  const startSecondsRef = useRef(startSeconds);
+  startSecondsRef.current = startSeconds;
 
   useEffect(() => {
     let cancelled = false;
@@ -51,18 +78,30 @@ export default function JukeboxPlayer({ videoId, volume, stage, paused = false }
           rel: 0,
           playsinline: 1,
           iv_load_policy: 3,
+          // Always start muted so the picture can autoplay; sound unlocks on gesture.
+          mute: 1,
+          origin: window.location.origin,
         },
         events: {
           onReady: () => {
             readyRef.current = true;
-            playerRef.current?.setVolume(Math.round(volume * 100));
+            const p = playerRef.current;
+            if (!p) return;
+            try {
+              p.mute();
+              p.setVolume(Math.round(volumeRef.current * 100));
+            } catch {
+              /* ignore */
+            }
             if (pendingRef.current) {
-              playerRef.current?.loadVideoById(pendingRef.current);
+              loadTrack(p, pendingRef.current, startSecondsRef.current);
               pendingRef.current = null;
+              if (!mutedRef.current) p.unMute();
+              if (pausedRef.current) p.pauseVideo();
             }
           },
         },
-      }) as typeof playerRef.current;
+      }) as YtPlayer;
     });
     return () => {
       cancelled = true;
@@ -95,22 +134,25 @@ export default function JukeboxPlayer({ videoId, volume, stage, paused = false }
       return;
     }
     try {
-      p.loadVideoById(videoId);
+      loadTrack(p, videoId, startSecondsRef.current);
+      if (!mutedRef.current) p.unMute();
+      if (pausedRef.current) p.pauseVideo();
     } catch {
       /* ignore */
     }
-  }, [videoId]);
+  }, [videoId, trackKey]);
 
   useEffect(() => {
     const p = playerRef.current;
     if (readyRef.current && p) {
       try {
         p.setVolume(Math.round(volume * 100));
+        if (muted) p.mute();
       } catch {
         /* ignore */
       }
     }
-  }, [volume]);
+  }, [volume, muted]);
 
   useEffect(() => {
     const p = playerRef.current;
@@ -121,16 +163,17 @@ export default function JukeboxPlayer({ videoId, volume, stage, paused = false }
     } catch {
       /* ignore */
     }
-  }, [paused, videoId]);
+  }, [paused, videoId, trackKey]);
 
   // Browsers can block autoplay-with-sound until the user interacts. On the
-  // first gesture, nudge the current jukebox track to play with sound. Guarded
-  // by videoIdRef so we never restart a stopped (non-jukebox) track.
+  // first gesture, nudge the current jukebox track to play. Guarded by
+  // videoIdRef so we never restart a stopped (idle) track.
   useEffect(() => {
     const unlock = () => {
       const p = playerRef.current;
       if (readyRef.current && p && videoIdRef.current && !pausedRef.current) {
         try {
+          applyMute(p, mutedRef.current);
           p.setVolume(Math.round(volumeRef.current * 100));
           p.playVideo();
         } catch {

@@ -31,11 +31,13 @@
 
 ## 4. Event night
 
-1. On the **admin laptop/iPad** (connected to the room speakers/HDMI audio):
+1. On the **admin laptop/iPad**:
    - Open `https://YOUR_DOMAIN/admin`
    - Sign in
-   - Stay on **Playback** so the YouTube player keeps focus; click once to unlock audio
-2. On the **public screen** browser: open `https://YOUR_DOMAIN/display` fullscreen
+   - Use Queue / Playback / Settings to run the night
+2. On the **public screen** (connected to the room speakers/HDMI):
+   - Open `https://YOUR_DOMAIN/display` fullscreen
+   - Click once to unlock audio
 3. Visitors join at `https://YOUR_DOMAIN/`
 
 ### Checklist
@@ -45,7 +47,7 @@
 - [ ] Admin max play duration caps how long each track plays
 - [ ] Admin can reorder / hide / delete / skip
 - [ ] Display updates within a second or two
-- [ ] Room audio plays from the admin device
+- [ ] Room audio plays from the display screen
 
 ## Optional site password
 

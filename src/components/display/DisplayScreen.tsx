@@ -1,9 +1,31 @@
+import { useEffect, useState } from "react";
+import JukeboxPlayer from "../admin/JukeboxPlayer";
 import { useQueue, useSettings, playableDuration } from "../../supabase/hooks";
 import { fmtTime } from "../../lib/format";
+
+function elapsedSeconds(startedAt: string | null): number {
+  if (!startedAt) return 0;
+  return Math.max(0, (Date.now() - new Date(startedAt).getTime()) / 1000);
+}
 
 export default function DisplayScreen() {
   const { settings } = useSettings();
   const { playing, queued, loading } = useQueue();
+  const [audioUnlocked, setAudioUnlocked] = useState(false);
+  const limit = playing ? playableDuration(playing, settings.max_duration_sec) : 0;
+  const startSeconds = playing
+    ? Math.min(Math.max(0, limit - 0.5), elapsedSeconds(playing.started_at))
+    : 0;
+
+  useEffect(() => {
+    const unlock = () => setAudioUnlocked(true);
+    window.addEventListener("pointerdown", unlock, { once: true });
+    window.addEventListener("keydown", unlock, { once: true });
+    return () => {
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("keydown", unlock);
+    };
+  }, []);
 
   return (
     <div className="display-screen">
@@ -15,7 +37,16 @@ export default function DisplayScreen() {
         />
       )}
 
-      <div className="display-overlay">
+      <JukeboxPlayer
+        videoId={playing?.youtube_id ?? null}
+        volume={settings.volume}
+        stage={Boolean(playing)}
+        paused={settings.paused}
+        startSeconds={startSeconds}
+        trackKey={playing?.id}
+      />
+
+      <div className={`display-overlay${playing ? " playing" : ""}`}>
         <header className="display-brand">
           <span>YouTube Jukebox</span>
           {settings.paused && <em>Paused</em>}
@@ -30,7 +61,7 @@ export default function DisplayScreen() {
                 {playing.visitor?.name ?? "Guest"}
                 {playing.channel ? ` · ${playing.channel}` : ""}
                 {" · "}
-                {fmtTime(playableDuration(playing, settings.max_duration_sec))}
+                {fmtTime(limit)}
               </p>
             </>
           ) : (
@@ -57,6 +88,12 @@ export default function DisplayScreen() {
           )}
         </section>
       </div>
+
+      {!audioUnlocked && (
+        <button type="button" className="display-unlock" onClick={() => setAudioUnlocked(true)}>
+          Click to start audio
+        </button>
+      )}
     </div>
   );
 }

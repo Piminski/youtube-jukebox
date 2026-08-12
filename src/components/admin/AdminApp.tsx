@@ -70,12 +70,19 @@ export default function AdminApp() {
     : 0;
 
   return (
-    <div className="admin-shell">
+    <div className={`admin-shell${section === "controls" ? " playback" : ""}`}>
       <JukeboxPlayer
         videoId={playing?.youtube_id ?? null}
         volume={settings.volume}
         stage={section === "controls"}
+        muted
         paused={settings.paused}
+        startSeconds={
+          playing?.started_at
+            ? Math.max(0, (Date.now() - new Date(playing.started_at).getTime()) / 1000)
+            : 0
+        }
+        trackKey={playing?.id}
       />
 
       <aside className="admin-nav">
@@ -245,7 +252,7 @@ export default function AdminApp() {
           <section className="admin-panel">
             <header className="admin-panel-head">
               <h1>Playback</h1>
-              <p className="muted">This device is the room audio host.</p>
+              <p className="muted">Room audio and picture play on the display screen.</p>
             </header>
 
             <div className="now-card">
