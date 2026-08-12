@@ -1,0 +1,258 @@
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Search, X } from "lucide-react";
+import { JUKEBOX_CATALOG_IDS, jukeboxThumbnail } from "../../jukeboxCatalog";
+import { fmtTime } from "../../lib/format";
+import { addVideo } from "../../supabase/api";
+import {
+  searchYouTube,
+  fetchYouTubeVideos,
+  youtubeConfigured,
+  YouTubeError,
+  type YouTubeResult,
+} from "../../youtube";
+import JukeboxPreview from "../JukeboxPreview";
+import type { Visitor } from "../../supabase/types";
+
+interface AddVideoProps {
+  visitor: Visitor;
+  maxDurationSec: number;
+  onAdded: () => void;
+  onBack: () => void;
+}
+
+function catalogPlaceholder(videoId: string): YouTubeResult {
+  return {
+    videoId,
+    title: "Loading track…",
+    channel: "",
+    thumbnail: jukeboxThumbnail(videoId),
+    durationSec: 0,
+  };
+}
+
+export default function AddVideo({
+  visitor,
+  maxDurationSec,
+  onAdded,
+  onBack,
+}: AddVideoProps) {
+  const [catalog, setCatalog] = useState<YouTubeResult[]>(() =>
+    JUKEBOX_CATALOG_IDS.map(catalogPlaceholder),
+  );
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<YouTubeResult[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [selected, setSelected] = useState<YouTubeResult | null>(null);
+  const [previewing, setPreviewing] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    const ac = new AbortController();
+    void fetchYouTubeVideos(
+      [...JUKEBOX_CATALOG_IDS],
+      ac.signal,
+      (track) => {
+        setCatalog((prev) => {
+          const idx = prev.findIndex((t) => t.videoId === track.videoId);
+          if (idx === -1) return [...prev, track];
+          const next = [...prev];
+          next[idx] = track;
+          return next;
+        });
+      },
+      { catalog: true },
+    ).catch(() => {
+      /* keep placeholders */
+    });
+    return () => ac.abort();
+  }, []);
+
+  useEffect(() => {
+    const q = query.trim();
+    abortRef.current?.abort();
+    if (!q) {
+      setResults([]);
+      setSearching(false);
+      setSearchError(null);
+      return;
+    }
+    if (!youtubeConfigured()) {
+      setSearchError("YouTube search isn’t configured (missing API key).");
+      return;
+    }
+    const ac = new AbortController();
+    abortRef.current = ac;
+    setSearching(true);
+    setSearchError(null);
+    setResults([]);
+    const handle = window.setTimeout(() => {
+      void searchYouTube(
+        q,
+        ac.signal,
+        (result) => {
+          if (result.durationSec > 0 && result.durationSec <= maxDurationSec) {
+            setResults((prev) =>
+              prev.some((r) => r.videoId === result.videoId)
+                ? prev
+                : [...prev, result],
+            );
+          }
+        },
+      )
+        .catch((err) => {
+          if (ac.signal.aborted) return;
+          setSearchError(
+            err instanceof YouTubeError || err instanceof Error
+              ? err.message
+              : "Search failed",
+          );
+        })
+        .finally(() => {
+          if (!ac.signal.aborted) setSearching(false);
+        });
+    }, 350);
+    return () => {
+      window.clearTimeout(handle);
+      ac.abort();
+    };
+  }, [query, maxDurationSec]);
+
+  const list = useMemo(() => {
+    if (query.trim()) return results;
+    return catalog.filter(
+      (t) => t.durationSec === 0 || t.durationSec <= maxDurationSec,
+    );
+  }, [query, results, catalog, maxDurationSec]);
+
+  const choose = (track: YouTubeResult) => {
+    if (track.durationSec > maxDurationSec) {
+      setError(`Tracks must be ${fmtTime(maxDurationSec)} or shorter.`);
+      return;
+    }
+    setSelected(track);
+    setPreviewing(false);
+    setError(null);
+  };
+
+  const publish = async () => {
+    if (!selected) return;
+    if (selected.durationSec > maxDurationSec) {
+      setError(`Tracks must be ${fmtTime(maxDurationSec)} or shorter.`);
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      await addVideo({
+        youtube_id: selected.videoId,
+        title: selected.title,
+        channel: selected.channel,
+        thumbnail: selected.thumbnail,
+        duration_sec: selected.durationSec || 180,
+        visitor_id: visitor.id,
+      });
+      onAdded();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not add video");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="shell visitor-shell">
+      <header className="page-head">
+        <button type="button" className="btn ghost" onClick={onBack}>
+          Queue
+        </button>
+        <h1>Add a video</h1>
+        <p className="muted">Max length {fmtTime(maxDurationSec)}</p>
+      </header>
+
+      <div className="jukebox-search">
+        <Search className="jukebox-search-icon" size={18} />
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search YouTube"
+          aria-label="Search YouTube"
+        />
+        {query && (
+          <button
+            type="button"
+            className="jukebox-search-clear"
+            onClick={() => setQuery("")}
+            aria-label="Clear search"
+          >
+            <X size={16} />
+          </button>
+        )}
+      </div>
+
+      {searching && <p className="jukebox-search-status">Searching…</p>}
+      {searchError && <p className="jukebox-error">{searchError}</p>}
+      {!youtubeConfigured() && (
+        <p className="jukebox-warn">
+          Set <code>VITE_YOUTUBE_API_KEY</code> to enable search.
+        </p>
+      )}
+
+      <div className="jukebox-results app-scroll">
+        {list.map((r) => (
+          <button
+            key={r.videoId}
+            type="button"
+            className={`jukebox-result${selected?.videoId === r.videoId ? " selected" : ""}`}
+            onClick={() => choose(r)}
+          >
+            <span className="jukebox-thumb">
+              {r.thumbnail && <img src={r.thumbnail} alt="" loading="lazy" />}
+              {r.durationSec > 0 && (
+                <span className="jukebox-dur">{fmtTime(r.durationSec)}</span>
+              )}
+            </span>
+            <span className="jukebox-result-info">
+              <span className="jukebox-result-title">{r.title}</span>
+              {r.channel && (
+                <span className="jukebox-result-channel">{r.channel}</span>
+              )}
+            </span>
+          </button>
+        ))}
+      </div>
+
+      {selected && (
+        <div className="selected-panel">
+          <JukeboxPreview
+            videoId={selected.videoId}
+            playing={previewing}
+            title={selected.title}
+            channel={selected.channel}
+            thumbnail={selected.thumbnail}
+          />
+          <div className="selected-actions">
+            <button
+              type="button"
+              className="btn ghost"
+              onClick={() => setPreviewing((p) => !p)}
+            >
+              {previewing ? "Stop preview" : "Preview"}
+            </button>
+            <button
+              type="button"
+              className="btn primary"
+              disabled={busy}
+              onClick={() => void publish()}
+            >
+              {busy ? "Adding…" : "Add to queue"}
+            </button>
+          </div>
+          {error && <p className="form-error">{error}</p>}
+        </div>
+      )}
+    </div>
+  );
+}

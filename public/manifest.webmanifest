@@ -1,0 +1,23 @@
+{
+  "name": "Miu Miusic",
+  "short_name": "Miu Miusic",
+  "description": "Create your track and add it to the in-store playlist.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#161514",
+  "theme_color": "#161514",
+  "icons": [
+    {
+      "src": "/miumiu-logo-square.png",
+      "sizes": "500x500",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/miumiu-logo-square.png",
+      "sizes": "500x500",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

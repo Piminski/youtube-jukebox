@@ -1,0 +1,25 @@
+# Keep CLI deploys lean. Vercel rebuilds from source, so anything not needed to
+# build or serve the app is excluded. (node_modules and .vercel are always
+# ignored automatically.) The runtime audio in public/loops/*.m4a is kept.
+
+# Build output (Vercel rebuilds it)
+dist
+
+# Version control / tooling
+.git
+.cursor
+
+# Raw, pre-transcoded source assets (not served; transcoded into public/loops)
+loops-incoming
+**/*.wav
+
+# Design source files
+design
+
+# Local-only and editor cruft
+.DS_Store
+.env
+.env.*
+!.env.example
+tsconfig.tsbuildinfo
+npm-debug.log*
