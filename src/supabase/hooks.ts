@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { getSupabase, supabaseConfigured } from "./client";
+import { EVENT_NAME } from "../lib/eventName";
 import { fetchQueue, fetchSettings } from "./api";
 import type { QueueItem, Settings } from "./types";
 
 const DEFAULT_SETTINGS: Settings = {
   id: 1,
+  event_title: EVENT_NAME,
   max_duration_sec: 360,
   paused: false,
   volume: 0.85,

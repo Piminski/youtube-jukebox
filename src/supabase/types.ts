@@ -26,6 +26,7 @@ export interface QueueItem {
 
 export interface Settings {
   id: number;
+  event_title: string;
   max_duration_sec: number;
   paused: boolean;
   volume: number;

@@ -53,7 +53,9 @@ export async function fetchSettings(): Promise<Settings> {
 }
 
 export async function updateSettings(
-  patch: Partial<Pick<Settings, "max_duration_sec" | "paused" | "volume">>,
+  patch: Partial<
+    Pick<Settings, "event_title" | "max_duration_sec" | "paused" | "volume">
+  >,
 ): Promise<Settings> {
   const sb = getSupabase();
   const { data, error } = await sb

@@ -39,12 +39,16 @@ create index if not exists queue_items_active_idx
 -- Single-row settings
 create table if not exists public.settings (
   id int primary key default 1 check (id = 1),
+  event_title text not null default 'Jukebox',
   -- Cap on how long a queued video actually plays (not a limit on adding)
   max_duration_sec int not null default 360 check (max_duration_sec between 30 and 1800),
   paused boolean not null default false,
   volume real not null default 0.85 check (volume >= 0 and volume <= 1),
   updated_at timestamptz not null default now()
 );
+
+alter table public.settings
+  add column if not exists event_title text not null default 'Jukebox';
 
 insert into public.settings (id) values (1)
 on conflict (id) do nothing;

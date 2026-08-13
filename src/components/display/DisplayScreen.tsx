@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import JukeboxPlayer from "../admin/JukeboxPlayer";
 import { useQueue, useSettings, playableDuration } from "../../supabase/hooks";
-import { EVENT_NAME } from "../../lib/eventName";
+import { eventTitle } from "../../lib/eventName";
 
 function elapsedSeconds(startedAt: string | null): number {
   if (!startedAt) return 0;
@@ -59,7 +59,7 @@ export default function DisplayScreen() {
       className={`display-screen${isFullscreen ? " fullscreen" : ""}`}
     >
       <div className="display-top">
-        <span className="display-event">{EVENT_NAME}</span>
+        <span className="display-event">{eventTitle(settings.event_title)}</span>
         {settings.paused && <span className="display-paused">Paused</span>}
       </div>
 

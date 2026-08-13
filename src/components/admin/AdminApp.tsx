@@ -9,7 +9,7 @@ import {
   updateSettings,
 } from "../../supabase/api";
 import { usePlaybackHost } from "../../hooks/usePlaybackHost";
-import { EVENT_NAME } from "../../lib/eventName";
+import { eventTitle } from "../../lib/eventName";
 import { fmtTime } from "../../lib/format";
 import { navigate } from "../../lib/route";
 import { playableDuration, useQueue, useSettings } from "../../supabase/hooks";
@@ -368,6 +368,33 @@ export default function AdminApp() {
           {section === "settings" && (
             <section className="admin-panel">
               <label className="slider-label">
+                Event title
+                <input
+                  type="text"
+                  maxLength={80}
+                  value={settings.event_title ?? ""}
+                  onChange={(e) => {
+                    setSettings({ ...settings, event_title: e.target.value });
+                  }}
+                  onBlur={() => {
+                    const next = eventTitle(settings.event_title);
+                    if (next !== settings.event_title) {
+                      setSettings({ ...settings, event_title: next });
+                    }
+                    void updateSettings({ event_title: next }).then((s) => {
+                      setSettings(s);
+                      void refreshSettings();
+                    });
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                  }}
+                />
+              </label>
+              <p className="panel-note">
+                Shown in the top left of the display screen.
+              </p>
+              <label className="slider-label">
                 Max play duration {fmtTime(settings.max_duration_sec)}
                 <input
                   type="range"
@@ -407,7 +434,8 @@ export default function AdminApp() {
 
         <div className="admin-foot">
           <span>
-            Event: {EVENT_NAME} · {items.length} active · {hidden.length} hidden
+            Event: {eventTitle(settings.event_title)} · {items.length} active ·{" "}
+            {hidden.length} hidden
           </span>
           <span>Supabase realtime · {error ? "Offline" : "Connected"}</span>
         </div>
