@@ -903,15 +903,14 @@ input[type="range"] {
   margin-left: 12px;
 }
 
-.meter {
-  width: 96px;
-  height: 2px;
-  background: var(--line);
+.transport-volume {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
-.meter div {
-  height: 2px;
-  background: var(--text);
+.transport-volume input[type="range"] {
+  width: 96px;
 }
 
 /* queue table */

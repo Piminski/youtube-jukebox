@@ -203,12 +203,24 @@ export default function AdminApp() {
             </button>
           </div>
           <div className="transport-readouts">
-            <span className="mono-label">
-              Vol {Math.round(settings.volume * 100)}
-            </span>
-            <div className="meter">
-              <div style={{ width: `${Math.round(settings.volume * 100)}%` }} />
-            </div>
+            <label className="transport-volume">
+              <span className="mono-label">
+                Vol {Math.round(settings.volume * 100)}
+              </span>
+              <input
+                type="range"
+                min={0}
+                max={1}
+                step={0.01}
+                value={settings.volume}
+                aria-label="Volume"
+                onChange={(e) => {
+                  const volume = Number(e.target.value);
+                  setSettings({ ...settings, volume });
+                  void updateSettings({ volume });
+                }}
+              />
+            </label>
             <span className="mono-label max">
               Max {fmtTime(settings.max_duration_sec)}
             </span>
@@ -368,21 +380,6 @@ export default function AdminApp() {
 
           {section === "controls" && (
             <section className="admin-panel">
-              <label className="slider-label">
-                Volume {Math.round(settings.volume * 100)}
-                <input
-                  type="range"
-                  min={0}
-                  max={1}
-                  step={0.01}
-                  value={settings.volume}
-                  onChange={(e) => {
-                    const volume = Number(e.target.value);
-                    setSettings({ ...settings, volume });
-                    void updateSettings({ volume });
-                  }}
-                />
-              </label>
               <p className="panel-note">
                 Room audio and picture play on the display screen.
               </p>
