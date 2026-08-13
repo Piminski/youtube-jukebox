@@ -11,70 +11,68 @@ export function usePlaybackHost(
   playing: QueueItem | null,
   settings: Settings,
   enabled: boolean,
+  queuedCount = 0,
 ) {
   const [elapsed, setElapsed] = useState(0);
   const advancingRef = useRef(false);
-  const playingIdRef = useRef<string | null>(null);
-  const startedAtRef = useRef<string | null>(null);
+  const elapsedRef = useRef(0);
+
+  // Kick the first queued item into "playing" whenever the queue is idle.
+  useEffect(() => {
+    if (!enabled || playing || queuedCount <= 0) return;
+    let cancelled = false;
+    const kick = () => {
+      if (cancelled) return;
+      void ensurePlaying().catch(() => {
+        /* retry on the next interval */
+      });
+    };
+    kick();
+    const id = window.setInterval(kick, 2000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, [enabled, playing, queuedCount]);
 
   useEffect(() => {
-    if (!enabled) return;
-    void ensurePlaying().catch(() => {
-      /* ignore */
-    });
-  }, [enabled, playing?.id]);
-
-  useEffect(() => {
+    advancingRef.current = false;
     if (!enabled || !playing) {
+      elapsedRef.current = 0;
       setElapsed(0);
-      playingIdRef.current = null;
-      startedAtRef.current = null;
-      advancingRef.current = false;
       return;
     }
-    if (
-      playingIdRef.current !== playing.id ||
-      startedAtRef.current !== playing.started_at
-    ) {
-      playingIdRef.current = playing.id;
-      startedAtRef.current = playing.started_at;
-      advancingRef.current = false;
-      if (playing.started_at) {
-        const base = (Date.now() - new Date(playing.started_at).getTime()) / 1000;
-        setElapsed(Math.max(0, base));
-      } else {
-        setElapsed(0);
-      }
-    }
-  }, [enabled, playing]);
+    const base = playing.started_at
+      ? Math.max(0, (Date.now() - new Date(playing.started_at).getTime()) / 1000)
+      : 0;
+    elapsedRef.current = base;
+    setElapsed(base);
+  }, [enabled, playing?.id, playing?.started_at]);
 
   useEffect(() => {
     if (!enabled || !playing || settings.paused) return;
 
-    let raf = 0;
-    let last = performance.now();
+    const itemId = playing.id;
+    const limit = playableDuration(playing, settings.max_duration_sec);
+    const loop = settings.playlist_loop;
+    let last = Date.now();
 
-    const tick = (now: number) => {
-      const dt = (now - last) / 1000;
+    const tick = () => {
+      const now = Date.now();
+      elapsedRef.current += (now - last) / 1000;
       last = now;
-      setElapsed((prev) => {
-        const next = prev + dt;
-        const limit = playableDuration(playing, settings.max_duration_sec);
-        if (next >= limit && !advancingRef.current) {
-          advancingRef.current = true;
-          void advanceQueue(playing.id, { loop: settings.playlist_loop })
-            .catch(() => {
-              advancingRef.current = false;
-            });
-        }
-        return next;
-      });
-      raf = requestAnimationFrame(tick);
+      setElapsed(elapsedRef.current);
+      if (elapsedRef.current >= limit && !advancingRef.current) {
+        advancingRef.current = true;
+        void advanceQueue(itemId, { loop }).catch(() => {
+          advancingRef.current = false;
+        });
+      }
     };
 
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [enabled, playing, settings.paused, settings.max_duration_sec, settings.playlist_loop]);
+    const id = window.setInterval(tick, 250);
+    return () => window.clearInterval(id);
+  }, [enabled, playing?.id, playing?.started_at, settings.paused, settings.max_duration_sec, settings.playlist_loop]);
 
   return { elapsed };
 }

@@ -585,6 +585,10 @@ input[type="range"] {
   color: var(--muted);
 }
 
+.jukebox-result.added .jukebox-result-channel {
+  color: var(--accent);
+}
+
 .selected-panel {
   flex: none;
   padding: 12px;
@@ -1201,7 +1205,7 @@ input[type="range"] {
 .display-title {
   font-family: var(--pixel);
   font-weight: 400;
-  font-size: clamp(18px, 2vw, 28px);
+  font-size: clamp(9px, 1vw, 14px);
   line-height: 1;
   text-transform: uppercase;
   min-width: 0;

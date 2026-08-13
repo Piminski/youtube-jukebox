@@ -15,12 +15,14 @@ interface AddVideoProps {
   visitor: Visitor;
   onAdded: () => void;
   onBack: () => void;
+  active?: boolean;
 }
 
 export default function AddVideo({
   visitor,
   onAdded,
   onBack,
+  active = true,
 }: AddVideoProps) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<YouTubeResult[]>([]);
@@ -30,6 +32,7 @@ export default function AddVideo({
   const [previewing, setPreviewing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [addedIds, setAddedIds] = useState<Set<string>>(() => new Set());
   const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
@@ -82,6 +85,10 @@ export default function AddVideo({
     };
   }, [query]);
 
+  useEffect(() => {
+    if (!active) setPreviewing(false);
+  }, [active]);
+
   const choose = (track: YouTubeResult) => {
     setSelected(track);
     setPreviewing(false);
@@ -101,6 +108,8 @@ export default function AddVideo({
         duration_sec: selected.durationSec || 180,
         visitor_id: visitor.id,
       });
+      setAddedIds((prev) => new Set(prev).add(selected.videoId));
+      setPreviewing(false);
       onAdded();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not add video");
@@ -122,7 +131,11 @@ export default function AddVideo({
 
       <div className="greeting">
         <h1>Add a video.</h1>
-        <p className="status-line">Search YouTube or paste a link</p>
+        <p className="status-line">
+          {addedIds.size
+            ? "Added to queue — pick another or go back"
+            : "Search YouTube or paste a link"}
+        </p>
       </div>
 
       <div className="addvideo-body">
@@ -162,7 +175,7 @@ export default function AddVideo({
           <button
             key={r.videoId}
             type="button"
-            className={`jukebox-result${selected?.videoId === r.videoId ? " selected" : ""}`}
+            className={`jukebox-result${selected?.videoId === r.videoId ? " selected" : ""}${addedIds.has(r.videoId) ? " added" : ""}`}
             onClick={() => choose(r)}
           >
             <span className="jukebox-thumb">
@@ -173,8 +186,10 @@ export default function AddVideo({
             </span>
             <span className="jukebox-result-info">
               <span className="jukebox-result-title">{r.title}</span>
-              {r.channel && (
-                <span className="jukebox-result-channel">{r.channel}</span>
+              {(addedIds.has(r.videoId) || r.channel) && (
+                <span className="jukebox-result-channel">
+                  {addedIds.has(r.videoId) ? "Added to queue" : r.channel}
+                </span>
               )}
             </span>
           </button>
@@ -201,10 +216,14 @@ export default function AddVideo({
               <button
                 type="button"
                 className="btn primary"
-                disabled={busy}
+                disabled={busy || addedIds.has(selected.videoId)}
                 onClick={() => void publish()}
               >
-                {busy ? "Adding…" : "Add to queue"}
+                {busy
+                  ? "Adding…"
+                  : addedIds.has(selected.videoId)
+                    ? "Added"
+                    : "Add to queue"}
               </button>
             </div>
             {error && <p className="form-error">{error}</p>}

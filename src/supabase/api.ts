@@ -151,6 +151,16 @@ export async function reorderQueue(orderedIds: string[]): Promise<void> {
   }
 }
 
+export async function ensurePlaying(): Promise<void> {
+  const items = await fetchQueue();
+  const playing = items.find((i) => i.status === "playing");
+  if (playing) return;
+  const next = items.find((i) => i.status === "queued");
+  if (next) {
+    await setItemStatus(next.id, "playing", { started_at: new Date().toISOString() });
+  }
+}
+
 /** Promote the next queued item; with loop, the current track goes to the end. */
 export async function advanceQueue(
   currentId: string | null,
@@ -158,6 +168,20 @@ export async function advanceQueue(
 ): Promise<void> {
   const sb = getSupabase();
   const loop = options.loop === true;
+
+  if (currentId) {
+    const { data: current, error: currentError } = await sb
+      .from("queue_items")
+      .select("id, status")
+      .eq("id", currentId)
+      .maybeSingle();
+    throwOnError(currentError);
+    // A stale timer tick after a skip/loop must not fight the new track.
+    if (!current || current.status !== "playing") {
+      await ensurePlaying();
+      return;
+    }
+  }
 
   const { data: next, error } = await sb
     .from("queue_items")
@@ -188,6 +212,7 @@ export async function advanceQueue(
         started_at: new Date().toISOString(),
       });
     }
+    await ensurePlaying();
     return;
   }
 
@@ -197,6 +222,7 @@ export async function advanceQueue(
   if (next) {
     await setItemStatus(next.id, "playing", { started_at: new Date().toISOString() });
   }
+  await ensurePlaying();
 }
 
 export async function playNow(id: string): Promise<void> {
@@ -213,16 +239,6 @@ export async function playNow(id: string): Promise<void> {
   const rest = items.filter((i) => i.id !== id).map((i) => i.id);
   await reorderQueue([id, ...rest]);
   await setItemStatus(id, "playing", { started_at: new Date().toISOString() });
-}
-
-export async function ensurePlaying(): Promise<void> {
-  const items = await fetchQueue();
-  const playing = items.find((i) => i.status === "playing");
-  if (playing) return;
-  const next = items.find((i) => i.status === "queued");
-  if (next) {
-    await setItemStatus(next.id, "playing", { started_at: new Date().toISOString() });
-  }
 }
 
 export async function adminSignIn(email: string, password: string): Promise<void> {

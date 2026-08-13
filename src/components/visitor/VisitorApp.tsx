@@ -14,6 +14,7 @@ type View = "queue" | "add";
 export default function VisitorApp() {
   const [visitor, setVisitor] = useState<Visitor | null>(() => loadLocalVisitor());
   const [view, setView] = useState<View>("queue");
+  const [searchOpen, setSearchOpen] = useState(false);
   const { settings, error: settingsError } = useSettings();
   const { playing, queued, loading, error, refresh } = useQueue();
 
@@ -21,32 +22,40 @@ export default function VisitorApp() {
     return <Register onRegistered={setVisitor} />;
   }
 
-  if (view === "add") {
-    return (
-      <AddVideo
-        visitor={visitor}
-        onBack={() => setView("queue")}
-        onAdded={() => {
-          void refresh();
-          setView("queue");
-        }}
-      />
-    );
-  }
-
   return (
-    <QueueView
-      visitor={visitor}
-      playing={playing}
-      queued={queued}
-      settings={settings}
-      loading={loading}
-      error={error || settingsError}
-      onAdd={() => setView("add")}
-      onSignOut={() => {
-        clearLocalVisitor();
-        setVisitor(null);
-      }}
-    />
+    <>
+      <div hidden={view !== "queue"}>
+        <QueueView
+          visitor={visitor}
+          playing={playing}
+          queued={queued}
+          settings={settings}
+          loading={loading}
+          error={error || settingsError}
+          onAdd={() => {
+            setSearchOpen(true);
+            setView("add");
+          }}
+          onSignOut={() => {
+            clearLocalVisitor();
+            setVisitor(null);
+            setView("queue");
+            setSearchOpen(false);
+          }}
+        />
+      </div>
+      {searchOpen && (
+        <div hidden={view !== "add"}>
+          <AddVideo
+            visitor={visitor}
+            onBack={() => setView("queue")}
+            onAdded={() => {
+              void refresh();
+            }}
+            active={view === "add"}
+          />
+        </div>
+      )}
+    </>
   );
 }

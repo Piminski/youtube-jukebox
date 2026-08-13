@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   adminSignOut,
   advanceQueue,
+  ensurePlaying,
   getAdminSession,
   playNow,
   reorderQueue,
@@ -34,7 +35,12 @@ export default function AdminApp() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const { settings, setSettings, refresh: refreshSettings } = useSettings();
   const { items, playing, queued, hidden, loading, error, refresh } = useQueue();
-  const { elapsed } = usePlaybackHost(playing, settings, Boolean(authed));
+  const { elapsed } = usePlaybackHost(
+    playing,
+    settings,
+    Boolean(authed),
+    queued.length,
+  );
 
   useEffect(() => {
     void getAdminSession()
@@ -170,14 +176,18 @@ export default function AdminApp() {
             <button
               type="button"
               className="btn"
-              disabled={!playing}
+              disabled={!playing && queued.length === 0}
               onClick={() => {
-                void advanceQueue(playing?.id ?? null, {
-                  loop: settings.playlist_loop,
-                }).then(() => refresh());
+                if (playing) {
+                  void advanceQueue(playing.id, {
+                    loop: settings.playlist_loop,
+                  }).then(() => refresh());
+                } else {
+                  void ensurePlaying().then(() => refresh());
+                }
               }}
             >
-              Skip ≫
+              {playing ? "Skip ≫" : "Start ▶"}
             </button>
             <button
               type="button"
