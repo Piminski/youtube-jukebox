@@ -34,6 +34,7 @@ export default function AdminApp() {
   const [authed, setAuthed] = useState<boolean | null>(null);
   const [section, setSection] = useState<Section>("queue");
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [titleError, setTitleError] = useState<string | null>(null);
   const { settings, setSettings, refresh: refreshSettings } = useSettings();
   const { items, playing, queued, hidden, loading, error, refresh } = useQueue();
   const { elapsed } = usePlaybackHost(
@@ -243,6 +244,7 @@ export default function AdminApp() {
                 <span />
                 <span>Title</span>
                 <span>Added by</span>
+                <span className="r">Plays</span>
                 <span className="r">Len</span>
                 <span className="r">Actions</span>
               </div>
@@ -262,6 +264,7 @@ export default function AdminApp() {
                     <span className="cell-who">
                       {addedBy(item)}
                     </span>
+                    <span className="cell-plays">{item.play_count ?? 0}</span>
                     <span className="cell-len">
                       {fmtTime(playableDuration(item, settings.max_duration_sec))}
                     </span>
@@ -347,6 +350,7 @@ export default function AdminApp() {
                         <span className="cell-who">
                           {addedBy(item)}
                         </span>
+                        <span className="cell-plays">{item.play_count ?? 0}</span>
                         <span className="cell-len">
                           {fmtTime(
                             playableDuration(item, settings.max_duration_sec),
@@ -407,16 +411,29 @@ export default function AdminApp() {
                     if (next !== settings.event_title) {
                       setSettings({ ...settings, event_title: next });
                     }
-                    void updateSettings({ event_title: next }).then((s) => {
-                      setSettings(s);
-                      void refreshSettings();
-                    });
+                    void updateSettings({ event_title: next }).then(
+                      (s) => {
+                        setTitleError(null);
+                        setSettings(s);
+                        void refreshSettings();
+                      },
+                      (e) => {
+                        const msg =
+                          e instanceof Error ? e.message : "Could not save event title";
+                        setTitleError(
+                          /event_title|schema cache|does not exist/i.test(msg)
+                            ? "Database is missing event_title. In the Supabase SQL editor run: alter table public.settings add column if not exists event_title text not null default 'Jukebox';"
+                            : msg,
+                        );
+                      },
+                    );
                   }}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") (e.target as HTMLInputElement).blur();
                   }}
                 />
               </label>
+              {titleError && <p className="admin-status error">{titleError}</p>}
               <p className="panel-note">
                 Shown in the top left of the display screen.
               </p>
@@ -470,8 +487,8 @@ export default function AdminApp() {
                 </button>
               </label>
               <p className="panel-note">
-                When on, finished tracks move to the end of the queue so playback
-                keeps going.
+                When on, finished tracks requeue by play count and whose turn it
+                is, so unplayed and first-request tracks stay ahead.
               </p>
             </section>
           )}

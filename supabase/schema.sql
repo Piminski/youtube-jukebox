@@ -25,12 +25,36 @@ create table if not exists public.queue_items (
   status text not null default 'queued'
     check (status in ('queued', 'playing', 'hidden', 'played', 'removed')),
   position int not null,
+  play_count int not null default 0 check (play_count >= 0),
+  submit_ordinal int not null default 1 check (submit_ordinal >= 1),
   started_at timestamptz,
   created_at timestamptz not null default now()
 );
 
-create index if not exists queue_items_status_position_idx
-  on public.queue_items (status, position);
+alter table public.queue_items
+  add column if not exists play_count int not null default 0;
+
+alter table public.queue_items
+  add column if not exists submit_ordinal int not null default 1;
+
+-- Backfill ordinals for rows that predate the column (NULLs share one partition).
+with ranked as (
+  select id,
+    row_number() over (
+      partition by visitor_id
+      order by created_at, position
+    ) as ordinal
+  from public.queue_items
+  where status in ('queued', 'playing', 'hidden')
+)
+update public.queue_items q
+set submit_ordinal = ranked.ordinal
+from ranked
+where q.id = ranked.id;
+
+drop index if exists queue_items_status_position_idx;
+create index if not exists queue_items_status_rank_idx
+  on public.queue_items (status, play_count, submit_ordinal, position);
 
 create index if not exists queue_items_active_idx
   on public.queue_items (position)
@@ -57,22 +81,30 @@ alter table public.settings
 insert into public.settings (id) values (1)
 on conflict (id) do nothing;
 
--- Assign position and restrict visitor inserts to queued status
+-- Assign position / submit ordinal and restrict visitor inserts to queued status
 create or replace function public.enforce_queue_insert()
 returns trigger
 language plpgsql
 as $$
 declare
   next_pos int;
+  next_ordinal int;
 begin
   if tg_op = 'INSERT' then
     if new.status is distinct from 'queued' then
       raise exception 'Visitors may only insert queued items';
     end if;
+    -- Visitors cannot jump the queue by setting play_count on insert.
+    new.play_count := 0;
     if new.position is null then
       select coalesce(max(position), 0) + 1 into next_pos from public.queue_items;
       new.position := next_pos;
     end if;
+    select coalesce(count(*), 0) + 1 into next_ordinal
+      from public.queue_items
+      where status in ('queued', 'playing', 'hidden')
+        and visitor_id is not distinct from new.visitor_id;
+    new.submit_ordinal := next_ordinal;
   end if;
   return new;
 end;

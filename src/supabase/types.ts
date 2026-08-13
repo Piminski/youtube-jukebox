@@ -19,6 +19,8 @@ export interface QueueItem {
   source: QueueSource;
   status: QueueStatus;
   position: number;
+  play_count: number;
+  submit_ordinal: number;
   started_at: string | null;
   created_at: string;
   visitor?: Visitor | null;

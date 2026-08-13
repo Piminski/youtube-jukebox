@@ -72,15 +72,25 @@ export async function updateSettings(
   return normalizeSettings(data as Settings);
 }
 
+function compareQueueOrder(a: QueueItem, b: QueueItem): number {
+  return (
+    (a.play_count ?? 0) - (b.play_count ?? 0) ||
+    (a.submit_ordinal ?? 1) - (b.submit_ordinal ?? 1) ||
+    a.position - b.position
+  );
+}
+
 export async function fetchQueue(): Promise<QueueItem[]> {
   const sb = getSupabase();
   const { data, error } = await sb
     .from("queue_items")
     .select("*, visitor:visitors(*)")
     .in("status", ["queued", "playing", "hidden"])
+    .order("play_count", { ascending: true })
+    .order("submit_ordinal", { ascending: true })
     .order("position", { ascending: true });
   throwOnError(error);
-  return (data ?? []) as QueueItem[];
+  return ((data ?? []) as QueueItem[]).sort(compareQueueOrder);
 }
 
 export async function addVideo(input: AddVideoInput): Promise<QueueItem> {
@@ -168,7 +178,7 @@ export async function addVideos(inputs: AddVideoInput[]): Promise<number> {
 export async function setItemStatus(
   id: string,
   status: QueueItem["status"],
-  extra: Partial<Pick<QueueItem, "started_at" | "position">> = {},
+  extra: Partial<Pick<QueueItem, "started_at" | "position" | "play_count">> = {},
 ): Promise<void> {
   const sb = getSupabase();
   const { error } = await sb
@@ -200,18 +210,19 @@ export async function ensurePlaying(): Promise<void> {
   }
 }
 
-/** Promote the next queued item; with loop, the current track goes to the end. */
+/** Promote the next queued item; with loop, the current track requeues by rank. */
 export async function advanceQueue(
   currentId: string | null,
   options: { loop?: boolean } = {},
 ): Promise<void> {
   const sb = getSupabase();
   const loop = options.loop === true;
+  let nextPlayCount = 0;
 
   if (currentId) {
     const { data: current, error: currentError } = await sb
       .from("queue_items")
-      .select("id, status")
+      .select("id, status, play_count")
       .eq("id", currentId)
       .maybeSingle();
     throwOnError(currentError);
@@ -220,12 +231,15 @@ export async function advanceQueue(
       await ensurePlaying();
       return;
     }
+    nextPlayCount = (current.play_count ?? 0) + 1;
   }
 
   const { data: next, error } = await sb
     .from("queue_items")
     .select("id")
     .eq("status", "queued")
+    .order("play_count", { ascending: true })
+    .order("submit_ordinal", { ascending: true })
     .order("position", { ascending: true })
     .limit(1)
     .maybeSingle();
@@ -242,6 +256,7 @@ export async function advanceQueue(
       await setItemStatus(currentId, "queued", {
         started_at: null,
         position: (maxRow?.position ?? 0) + 1,
+        play_count: nextPlayCount,
       });
       await setItemStatus(next.id, "playing", {
         started_at: new Date().toISOString(),
@@ -249,6 +264,7 @@ export async function advanceQueue(
     } else {
       await setItemStatus(currentId, "playing", {
         started_at: new Date().toISOString(),
+        play_count: nextPlayCount,
       });
     }
     await ensurePlaying();
@@ -256,7 +272,10 @@ export async function advanceQueue(
   }
 
   if (currentId) {
-    await setItemStatus(currentId, "played", { started_at: null });
+    await setItemStatus(currentId, "played", {
+      started_at: null,
+      play_count: nextPlayCount,
+    });
   }
   if (next) {
     await setItemStatus(next.id, "playing", { started_at: new Date().toISOString() });

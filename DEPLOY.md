@@ -11,12 +11,10 @@
    at `/admin`.
 5. Copy **Project URL** and **anon public** key from **Settings → API**.
 
-If this project already exists, also run:
-
-```sql
-alter table public.settings
-  add column if not exists playlist_loop boolean not null default true;
-```
+If this project already exists, re-run [`supabase/schema.sql`](supabase/schema.sql)
+(it is safe to re-run). That adds `play_count` and `submit_ordinal` on
+`queue_items`, backfills ordinals, and updates the insert trigger so new
+videos rank by fewest plays, then each user’s 1st/2nd/3rd request.
 
 ## 2. YouTube Data API
 
