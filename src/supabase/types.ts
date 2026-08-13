@@ -30,6 +30,7 @@ export interface Settings {
   max_duration_sec: number;
   paused: boolean;
   volume: number;
+  playlist_loop: boolean;
   updated_at: string;
 }
 

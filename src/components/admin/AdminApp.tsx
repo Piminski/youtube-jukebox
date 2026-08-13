@@ -89,7 +89,7 @@ export default function AdminApp() {
             ? Math.max(0, (Date.now() - new Date(playing.started_at).getTime()) / 1000)
             : 0
         }
-        trackKey={playing?.id}
+        trackKey={`${playing?.id ?? ""}:${playing?.started_at ?? ""}`}
       />
 
       <aside className="admin-side">
@@ -172,10 +172,24 @@ export default function AdminApp() {
               className="btn"
               disabled={!playing}
               onClick={() => {
-                void advanceQueue(playing?.id ?? null).then(() => refresh());
+                void advanceQueue(playing?.id ?? null, {
+                  loop: settings.playlist_loop,
+                }).then(() => refresh());
               }}
             >
               Skip ≫
+            </button>
+            <button
+              type="button"
+              className={`btn${settings.playlist_loop ? " primary" : ""}`}
+              aria-pressed={settings.playlist_loop}
+              onClick={() => {
+                void updateSettings({ playlist_loop: !settings.playlist_loop }).then((s) => {
+                  setSettings(s);
+                });
+              }}
+            >
+              Loop {settings.playlist_loop ? "On" : "Off"}
             </button>
           </div>
           <div className="transport-readouts">
@@ -427,6 +441,25 @@ export default function AdminApp() {
               <p className="panel-note">
                 Any video can be added. Playback stops at this length, then the
                 queue advances.
+              </p>
+              <label className="slider-label">
+                Loop playlist
+                <button
+                  type="button"
+                  className={`btn${settings.playlist_loop ? " primary" : ""}`}
+                  aria-pressed={settings.playlist_loop}
+                  onClick={() => {
+                    void updateSettings({ playlist_loop: !settings.playlist_loop }).then((s) => {
+                      setSettings(s);
+                    });
+                  }}
+                >
+                  {settings.playlist_loop ? "On" : "Off"}
+                </button>
+              </label>
+              <p className="panel-note">
+                When on, finished tracks move to the end of the queue so playback
+                keeps going.
               </p>
             </section>
           )}

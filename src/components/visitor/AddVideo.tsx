@@ -1,11 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Search, X } from "lucide-react";
-import { JUKEBOX_CATALOG_IDS, jukeboxThumbnail } from "../../jukeboxCatalog";
 import { fmtTime } from "../../lib/format";
 import { addVideo } from "../../supabase/api";
 import {
   searchYouTube,
-  fetchYouTubeVideos,
   youtubeConfigured,
   YouTubeError,
   type YouTubeResult,
@@ -19,24 +17,11 @@ interface AddVideoProps {
   onBack: () => void;
 }
 
-function catalogPlaceholder(videoId: string): YouTubeResult {
-  return {
-    videoId,
-    title: "Loading track…",
-    channel: "",
-    thumbnail: jukeboxThumbnail(videoId),
-    durationSec: 0,
-  };
-}
-
 export default function AddVideo({
   visitor,
   onAdded,
   onBack,
 }: AddVideoProps) {
-  const [catalog, setCatalog] = useState<YouTubeResult[]>(() =>
-    JUKEBOX_CATALOG_IDS.map(catalogPlaceholder),
-  );
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<YouTubeResult[]>([]);
   const [searching, setSearching] = useState(false);
@@ -46,27 +31,6 @@ export default function AddVideo({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
-
-  useEffect(() => {
-    const ac = new AbortController();
-    void fetchYouTubeVideos(
-      [...JUKEBOX_CATALOG_IDS],
-      ac.signal,
-      (track) => {
-        setCatalog((prev) => {
-          const idx = prev.findIndex((t) => t.videoId === track.videoId);
-          if (idx === -1) return [...prev, track];
-          const next = [...prev];
-          next[idx] = track;
-          return next;
-        });
-      },
-      { catalog: true },
-    ).catch(() => {
-      /* keep placeholders */
-    });
-    return () => ac.abort();
-  }, []);
 
   useEffect(() => {
     const q = query.trim();
@@ -118,11 +82,6 @@ export default function AddVideo({
     };
   }, [query]);
 
-  const list = useMemo(() => {
-    if (query.trim()) return results;
-    return catalog;
-  }, [query, results, catalog]);
-
   const choose = (track: YouTubeResult) => {
     setSelected(track);
     setPreviewing(false);
@@ -150,6 +109,8 @@ export default function AddVideo({
     }
   };
 
+  const q = query.trim();
+
   return (
     <div className="visitor-screen">
       <header className="topbar">
@@ -161,7 +122,7 @@ export default function AddVideo({
 
       <div className="greeting">
         <h1>Add a video.</h1>
-        <p className="status-line">Search YouTube or pick a track</p>
+        <p className="status-line">Search YouTube or paste a link</p>
       </div>
 
       <div className="addvideo-body">
@@ -192,9 +153,12 @@ export default function AddVideo({
           Set <code>VITE_YOUTUBE_API_KEY</code> to enable search.
         </p>
       )}
+      {q && !searching && !searchError && results.length === 0 && youtubeConfigured() && (
+        <p className="jukebox-search-status">No playable results</p>
+      )}
 
       <div className="jukebox-results app-scroll">
-        {list.map((r) => (
+        {results.map((r) => (
           <button
             key={r.videoId}
             type="button"

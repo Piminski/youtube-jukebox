@@ -15,6 +15,7 @@ export function usePlaybackHost(
   const [elapsed, setElapsed] = useState(0);
   const advancingRef = useRef(false);
   const playingIdRef = useRef<string | null>(null);
+  const startedAtRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!enabled) return;
@@ -27,10 +28,17 @@ export function usePlaybackHost(
     if (!enabled || !playing) {
       setElapsed(0);
       playingIdRef.current = null;
+      startedAtRef.current = null;
+      advancingRef.current = false;
       return;
     }
-    if (playingIdRef.current !== playing.id) {
+    if (
+      playingIdRef.current !== playing.id ||
+      startedAtRef.current !== playing.started_at
+    ) {
       playingIdRef.current = playing.id;
+      startedAtRef.current = playing.started_at;
+      advancingRef.current = false;
       if (playing.started_at) {
         const base = (Date.now() - new Date(playing.started_at).getTime()) / 1000;
         setElapsed(Math.max(0, base));
@@ -54,11 +62,8 @@ export function usePlaybackHost(
         const limit = playableDuration(playing, settings.max_duration_sec);
         if (next >= limit && !advancingRef.current) {
           advancingRef.current = true;
-          void advanceQueue(playing.id)
+          void advanceQueue(playing.id, { loop: settings.playlist_loop })
             .catch(() => {
-              /* ignore */
-            })
-            .finally(() => {
               advancingRef.current = false;
             });
         }
@@ -69,7 +74,7 @@ export function usePlaybackHost(
 
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [enabled, playing, settings.paused, settings.max_duration_sec]);
+  }, [enabled, playing, settings.paused, settings.max_duration_sec, settings.playlist_loop]);
 
   return { elapsed };
 }

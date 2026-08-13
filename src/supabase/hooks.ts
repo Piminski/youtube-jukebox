@@ -10,6 +10,7 @@ const DEFAULT_SETTINGS: Settings = {
   max_duration_sec: 360,
   paused: false,
   volume: 0.85,
+  playlist_loop: true,
   updated_at: new Date().toISOString(),
 };
 

@@ -1082,6 +1082,10 @@ input[type="range"] {
   outline-offset: -1px;
 }
 
+.slider-label .btn {
+  justify-self: start;
+}
+
 .panel-note {
   margin: 0;
   color: var(--muted);

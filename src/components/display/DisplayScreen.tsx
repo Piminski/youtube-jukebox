@@ -70,7 +70,7 @@ export default function DisplayScreen() {
           stage={Boolean(playing)}
           paused={settings.paused}
           startSeconds={startSeconds}
-          trackKey={playing?.id}
+          trackKey={`${playing?.id ?? ""}:${playing?.started_at ?? ""}`}
         />
         {!playing && (
           <span className="display-idle">

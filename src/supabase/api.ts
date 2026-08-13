@@ -45,16 +45,20 @@ export async function registerVisitor(name: string, email: string): Promise<Visi
   return visitor;
 }
 
+function normalizeSettings(row: Settings): Settings {
+  return { ...row, playlist_loop: row.playlist_loop !== false };
+}
+
 export async function fetchSettings(): Promise<Settings> {
   const sb = getSupabase();
   const { data, error } = await sb.from("settings").select("*").eq("id", 1).single();
   throwOnError(error);
-  return data as Settings;
+  return normalizeSettings(data as Settings);
 }
 
 export async function updateSettings(
   patch: Partial<
-    Pick<Settings, "event_title" | "max_duration_sec" | "paused" | "volume">
+    Pick<Settings, "event_title" | "max_duration_sec" | "paused" | "volume" | "playlist_loop">
   >,
 ): Promise<Settings> {
   const sb = getSupabase();
@@ -65,7 +69,7 @@ export async function updateSettings(
     .select("*")
     .single();
   throwOnError(error);
-  return data as Settings;
+  return normalizeSettings(data as Settings);
 }
 
 export async function fetchQueue(): Promise<QueueItem[]> {
@@ -147,12 +151,13 @@ export async function reorderQueue(orderedIds: string[]): Promise<void> {
   }
 }
 
-/** Mark current playing as played and promote the next queued item. */
-export async function advanceQueue(currentId: string | null): Promise<void> {
+/** Promote the next queued item; with loop, the current track goes to the end. */
+export async function advanceQueue(
+  currentId: string | null,
+  options: { loop?: boolean } = {},
+): Promise<void> {
   const sb = getSupabase();
-  if (currentId) {
-    await setItemStatus(currentId, "played", { started_at: null });
-  }
+  const loop = options.loop === true;
 
   const { data: next, error } = await sb
     .from("queue_items")
@@ -162,6 +167,33 @@ export async function advanceQueue(currentId: string | null): Promise<void> {
     .limit(1)
     .maybeSingle();
   throwOnError(error);
+
+  if (currentId && loop) {
+    if (next) {
+      const { data: maxRow } = await sb
+        .from("queue_items")
+        .select("position")
+        .order("position", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      await setItemStatus(currentId, "queued", {
+        started_at: null,
+        position: (maxRow?.position ?? 0) + 1,
+      });
+      await setItemStatus(next.id, "playing", {
+        started_at: new Date().toISOString(),
+      });
+    } else {
+      await setItemStatus(currentId, "playing", {
+        started_at: new Date().toISOString(),
+      });
+    }
+    return;
+  }
+
+  if (currentId) {
+    await setItemStatus(currentId, "played", { started_at: null });
+  }
   if (next) {
     await setItemStatus(next.id, "playing", { started_at: new Date().toISOString() });
   }

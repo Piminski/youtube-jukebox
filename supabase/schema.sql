@@ -44,11 +44,15 @@ create table if not exists public.settings (
   max_duration_sec int not null default 360 check (max_duration_sec between 30 and 1800),
   paused boolean not null default false,
   volume real not null default 0.85 check (volume >= 0 and volume <= 1),
+  playlist_loop boolean not null default true,
   updated_at timestamptz not null default now()
 );
 
 alter table public.settings
   add column if not exists event_title text not null default 'Jukebox';
+
+alter table public.settings
+  add column if not exists playlist_loop boolean not null default true;
 
 insert into public.settings (id) values (1)
 on conflict (id) do nothing;

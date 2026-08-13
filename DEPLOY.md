@@ -11,6 +11,13 @@
    at `/admin`.
 5. Copy **Project URL** and **anon public** key from **Settings → API**.
 
+If this project already exists, also run:
+
+```sql
+alter table public.settings
+  add column if not exists playlist_loop boolean not null default true;
+```
+
 ## 2. YouTube Data API
 
 1. In Google Cloud Console, enable **YouTube Data API v3**.
@@ -46,6 +53,7 @@
 - [ ] Visitor can register and add a video of any length
 - [ ] Admin max play duration caps how long each track plays
 - [ ] Admin can reorder / hide / delete / skip
+- [ ] Playlist loops by default (Loop On in admin transport)
 - [ ] Display updates within a second or two
 - [ ] Room audio plays from the display screen
 
