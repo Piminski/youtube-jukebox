@@ -26,7 +26,7 @@ const YT_BUFFERING = 3;
 
 function previewErrorMessage(code: number): string {
   if (code === 101 || code === 150) {
-    return "This track can't be played here — try another search result.";
+    return "Playback on other websites has been disabled by the owner.";
   }
   if (code === 100) {
     return "This track isn't available right now — try another result.";

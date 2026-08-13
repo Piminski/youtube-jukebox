@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   adminSignOut,
   advanceQueue,
@@ -14,6 +14,7 @@ import { eventTitle } from "../../lib/eventName";
 import { addedBy, fmtTime } from "../../lib/format";
 import { navigate } from "../../lib/route";
 import { playableDuration, useQueue, useSettings } from "../../supabase/hooks";
+import type { QueueItem } from "../../supabase/types";
 import AddPlaylist from "./AddPlaylist";
 import AdminLogin from "./AdminLogin";
 import JukeboxPlayer from "./JukeboxPlayer";
@@ -34,7 +35,9 @@ export default function AdminApp() {
   const [authed, setAuthed] = useState<boolean | null>(null);
   const [section, setSection] = useState<Section>("queue");
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<QueueItem | null>(null);
   const [titleError, setTitleError] = useState<string | null>(null);
+  const cancelDeleteRef = useRef<HTMLButtonElement>(null);
   const { settings, setSettings, refresh: refreshSettings } = useSettings();
   const { items, playing, queued, hidden, loading, error, refresh } = useQueue();
   const { elapsed } = usePlaybackHost(
@@ -49,6 +52,18 @@ export default function AdminApp() {
       .then((session) => setAuthed(Boolean(session)))
       .catch(() => setAuthed(false));
   }, []);
+
+  useEffect(() => {
+    if (!pendingDelete) return;
+    cancelDeleteRef.current?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && busyId !== pendingDelete.id) {
+        setPendingDelete(null);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [pendingDelete, busyId]);
 
   const orderedActive = useMemo(() => {
     const list = [...queued];
@@ -77,6 +92,19 @@ export default function AdminApp() {
       await refresh();
     } finally {
       setBusyId(null);
+    }
+  };
+
+  const removeItem = async (item: QueueItem) => {
+    setBusyId(item.id);
+    const wasPlaying = item.status === "playing";
+    try {
+      await setItemStatus(item.id, "removed");
+      if (wasPlaying) await advanceQueue(null);
+      await refresh();
+    } finally {
+      setBusyId(null);
+      setPendingDelete(null);
     }
   };
 
@@ -320,14 +348,7 @@ export default function AdminApp() {
                       <button
                         type="button"
                         className="danger"
-                        onClick={() => {
-                          setBusyId(item.id);
-                          const wasPlaying = item.status === "playing";
-                          void setItemStatus(item.id, "removed")
-                            .then(() => (wasPlaying ? advanceQueue(null) : undefined))
-                            .then(() => refresh())
-                            .finally(() => setBusyId(null));
-                        }}
+                        onClick={() => setPendingDelete(item)}
                       >
                         Del
                       </button>
@@ -370,11 +391,7 @@ export default function AdminApp() {
                           <button
                             type="button"
                             className="danger"
-                            onClick={() => {
-                              void setItemStatus(item.id, "removed").then(() =>
-                                refresh(),
-                              );
-                            }}
+                            onClick={() => setPendingDelete(item)}
                           >
                             Del
                           </button>
@@ -502,6 +519,51 @@ export default function AdminApp() {
           <span>Supabase realtime · {error ? "Offline" : "Connected"}</span>
         </div>
       </main>
+
+      {pendingDelete && (
+        <div
+          className="admin-dialog-backdrop"
+          onClick={() => {
+            if (busyId !== pendingDelete.id) setPendingDelete(null);
+          }}
+        >
+          <div
+            className="admin-dialog"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="delete-dialog-title"
+            aria-describedby="delete-dialog-body"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="mono-label" id="delete-dialog-title">
+              Delete track
+            </p>
+            <p className="admin-dialog-body" id="delete-dialog-body">
+              Remove <strong>{pendingDelete.title}</strong> from the queue? This
+              cannot be undone.
+            </p>
+            <div className="admin-dialog-actions">
+              <button
+                ref={cancelDeleteRef}
+                type="button"
+                className="btn"
+                disabled={busyId === pendingDelete.id}
+                onClick={() => setPendingDelete(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn danger"
+                disabled={busyId === pendingDelete.id}
+                onClick={() => void removeItem(pendingDelete)}
+              >
+                {busyId === pendingDelete.id ? "Deleting…" : "Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

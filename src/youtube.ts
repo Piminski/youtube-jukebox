@@ -171,7 +171,7 @@ export async function searchYouTube(
 
   const pastedId = extractYoutubeVideoId(q);
   if (pastedId) {
-    return fetchYouTubeVideos([pastedId], signal, onResult);
+    return fetchPastedYouTubeVideo(pastedId, signal, onResult);
   }
 
   const searchUrl = youtubeV3Url("search", {
@@ -323,6 +323,7 @@ function buildPlayableTrack(id: string, it: VideoDetailItem): YouTubeResult | nu
 /** Curated jukebox entries — trust API metadata; preview handles playback failures. */
 function buildCatalogTrack(id: string, it: VideoDetailItem): YouTubeResult | null {
   if (it.status?.privacyStatus === "private") return null;
+  if (it.status?.embeddable === false) return null;
   const durationSec = parseIsoDuration(it.contentDetails.duration);
   return {
     videoId: id,
@@ -337,6 +338,37 @@ export type FetchYouTubeVideosOptions = {
   /** Hand-picked jukebox list: skip slow client embed probes. */
   catalog?: boolean;
 };
+
+async function fetchPastedYouTubeVideo(
+  videoId: string,
+  signal?: AbortSignal,
+  onResult?: (result: YouTubeResult) => void,
+): Promise<number> {
+  const byId = await fetchVideoDetailsPage([videoId], signal);
+  const it = byId.get(videoId);
+  if (!it) {
+    throw new YouTubeError("This video isn't available.");
+  }
+
+  const track = buildPlayableTrack(videoId, it);
+  if (!track) {
+    throw new YouTubeError(
+      it.status?.embeddable === false
+        ? "This video can't be added — playback on other websites has been disabled by the owner."
+        : "This video can't be played here, so it can't be added to the queue.",
+    );
+  }
+
+  const verified = await filterEmbeddableVideoIds([videoId], signal, () => {
+    onResult?.(track);
+  });
+  if (verified === 0 && !signal?.aborted) {
+    throw new YouTubeError(
+      "This video can't be played here, so it can't be added to the queue.",
+    );
+  }
+  return verified;
+}
 
 // Load known video IDs (jukebox catalog) — cheaper than search.list (1 unit per page).
 export async function fetchYouTubeVideos(

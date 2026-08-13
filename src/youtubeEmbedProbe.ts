@@ -12,8 +12,24 @@ type YtPlayer = {
   cueVideoById: (id: string) => void;
   loadVideoById: (id: string) => void;
   playVideo: () => void;
+  mute: () => void;
   destroy: () => void;
 };
+
+export type YouTubePlaybackCheck = {
+  playable: boolean;
+  errorCode?: number;
+};
+
+export function youtubeQueueBlockReason(errorCode?: number): string {
+  if (errorCode === 101 || errorCode === 150) {
+    return "This video can't be added — playback on other websites has been disabled by the owner.";
+  }
+  if (errorCode === 100) {
+    return "This video isn't available, so it can't be added to the queue.";
+  }
+  return "This video can't be played here, so it can't be added to the queue.";
+}
 
 let verifyLock: Promise<void> = Promise.resolve();
 
@@ -31,10 +47,11 @@ function probePlayer(
   opts: {
     timeoutMs: number;
     settleMs: number;
+    mute?: boolean;
     onReady: (player: YtPlayer, finish: (ok: boolean) => void) => void;
     onState: (state: number, armSettle: () => void) => void;
   },
-): Promise<boolean> {
+): Promise<YouTubePlaybackCheck> {
   return new Promise((resolve) => {
     const host = document.createElement("div");
     host.className = "yt-embed-probe-host";
@@ -47,7 +64,7 @@ function probePlayer(
     let settleId = 0;
     let player: YtPlayer | null = null;
 
-    const finish = (ok: boolean) => {
+    const finish = (ok: boolean, errorCode?: number) => {
       if (settled) return;
       settled = true;
       clearTimeout(timeoutId);
@@ -59,7 +76,7 @@ function probePlayer(
         /* ignore */
       }
       host.remove();
-      resolve(ok);
+      resolve({ playable: ok, errorCode });
     };
 
     const armSettle = () => {
@@ -87,10 +104,12 @@ function probePlayer(
         modestbranding: 1,
         rel: 0,
         iv_load_policy: 3,
+        mute: opts.mute ? 1 : 0,
       },
       events: {
         onReady: () => {
           try {
+            if (opts.mute) player?.mute();
             opts.onReady(player!, finish);
           } catch {
             finish(false);
@@ -99,7 +118,7 @@ function probePlayer(
         onStateChange: (event: { data: number }) => {
           opts.onState(event.data, armSettle);
         },
-        onError: () => finish(false),
+        onError: (event: { data: number }) => finish(false, event.data),
       },
     });
   });
@@ -109,9 +128,9 @@ function probePlayer(
 async function verifyEmbeddableOnce(
   videoId: string,
   signal?: AbortSignal,
-): Promise<boolean> {
+): Promise<YouTubePlaybackCheck> {
   await loadYouTubeIframeApi();
-  if (signal?.aborted) return false;
+  if (signal?.aborted) return { playable: false };
 
   return probePlayer(signal, {
     timeoutMs: EMBED_PROBE_MS,
@@ -123,18 +142,22 @@ async function verifyEmbeddableOnce(
   });
 }
 
-// Stricter check when the user explicitly plays a preview (gesture present).
+// Stricter check when adding to the queue (user gesture present). Cue can
+// succeed for videos that then fail on play with "playback on other websites
+// has been disabled" (IFrame errors 101 / 150).
 async function verifyPlaybackOnce(
   videoId: string,
   signal?: AbortSignal,
-): Promise<boolean> {
+): Promise<YouTubePlaybackCheck> {
   await loadYouTubeIframeApi();
-  if (signal?.aborted) return false;
+  if (signal?.aborted) return { playable: false };
 
   return probePlayer(signal, {
     timeoutMs: PLAY_PROBE_MS,
     settleMs: PLAY_SETTLE_MS,
+    mute: true,
     onReady: (player) => {
+      player.mute();
       player.loadVideoById(videoId);
       player.playVideo();
     },
@@ -149,14 +172,15 @@ export async function verifyYouTubeEmbeddable(
   signal?: AbortSignal,
 ): Promise<boolean> {
   if (!videoId) return false;
-  return runExclusive(() => verifyEmbeddableOnce(videoId, signal));
+  const result = await runExclusive(() => verifyEmbeddableOnce(videoId, signal));
+  return result.playable;
 }
 
 export async function verifyYouTubePlayback(
   videoId: string,
   signal?: AbortSignal,
-): Promise<boolean> {
-  if (!videoId) return false;
+): Promise<YouTubePlaybackCheck> {
+  if (!videoId) return { playable: false };
   return runExclusive(() => verifyPlaybackOnce(videoId, signal));
 }
 

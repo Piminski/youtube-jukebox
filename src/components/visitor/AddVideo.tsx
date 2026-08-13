@@ -8,6 +8,10 @@ import {
   YouTubeError,
   type YouTubeResult,
 } from "../../youtube";
+import {
+  verifyYouTubePlayback,
+  youtubeQueueBlockReason,
+} from "../../youtubeEmbedProbe";
 import JukeboxPreview from "../JukeboxPreview";
 import type { Visitor } from "../../supabase/types";
 
@@ -32,6 +36,7 @@ export default function AddVideo({
   const [previewing, setPreviewing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [blocked, setBlocked] = useState(false);
   const [addedIds, setAddedIds] = useState<Set<string>>(() => new Set());
   const abortRef = useRef<AbortController | null>(null);
 
@@ -93,13 +98,25 @@ export default function AddVideo({
     setSelected(track);
     setPreviewing(false);
     setError(null);
+    setBlocked(false);
+  };
+
+  const blockSelected = (reason: string) => {
+    setPreviewing(false);
+    setBlocked(true);
+    setError(reason);
   };
 
   const publish = async () => {
-    if (!selected) return;
+    if (!selected || blocked) return;
     setBusy(true);
     setError(null);
     try {
+      const check = await verifyYouTubePlayback(selected.videoId);
+      if (!check.playable) {
+        blockSelected(youtubeQueueBlockReason(check.errorCode));
+        return;
+      }
       await addVideo({
         youtube_id: selected.videoId,
         title: selected.title,
@@ -204,6 +221,11 @@ export default function AddVideo({
               title={selected.title}
               channel={selected.channel}
               thumbnail={selected.thumbnail}
+              onPlaybackError={(videoId, code) => {
+                if (videoId === selected.videoId) {
+                  blockSelected(youtubeQueueBlockReason(code));
+                }
+              }}
             />
             <div className="selected-actions">
               <button
@@ -216,7 +238,7 @@ export default function AddVideo({
               <button
                 type="button"
                 className="btn primary"
-                disabled={busy || addedIds.has(selected.videoId)}
+                disabled={busy || blocked || addedIds.has(selected.videoId)}
                 onClick={() => void publish()}
               >
                 {busy
