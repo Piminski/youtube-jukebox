@@ -7,6 +7,7 @@ const EMBED_SETTLE_MS = 350;
 const PLAY_PROBE_MS = 8000;
 const PLAY_SETTLE_MS = 500;
 const PROBE_WORKERS = 3;
+const PLAY_FILTER_WORKERS = 4;
 
 type YtPlayer = {
   cueVideoById: (id: string) => void;
@@ -211,5 +212,35 @@ export async function filterEmbeddableVideoIds(
   }
 
   await Promise.all(Array.from({ length: PROBE_WORKERS }, () => worker()));
+  return verified;
+}
+
+/** Playlist import: play-probe each id in parallel. Failures are skipped, not fatal. */
+export async function filterPlayableVideoIds(
+  videoIds: string[],
+  signal: AbortSignal | undefined,
+  onVerified: (videoId: string) => void,
+): Promise<number> {
+  if (videoIds.length === 0) return 0;
+  await loadYouTubeIframeApi();
+  if (signal?.aborted) return 0;
+
+  let verified = 0;
+  let index = 0;
+
+  async function worker() {
+    while (!signal?.aborted) {
+      const at = index++;
+      if (at >= videoIds.length) break;
+      const id = videoIds[at]!;
+      const check = await verifyPlaybackOnce(id, signal);
+      if (!check.playable || signal?.aborted) continue;
+      verified++;
+      onVerified(id);
+    }
+  }
+
+  const workers = Math.min(PLAY_FILTER_WORKERS, videoIds.length);
+  await Promise.all(Array.from({ length: workers }, () => worker()));
   return verified;
 }

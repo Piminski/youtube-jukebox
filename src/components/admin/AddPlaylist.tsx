@@ -30,7 +30,10 @@ export default function AddPlaylist({ existingIds, onAdded }: AddPlaylistProps) 
     setError(null);
     setMessage(null);
     try {
-      const { tracks, truncated } = await fetchYouTubePlaylist(input, ac.signal);
+      const { tracks, truncated, blocked } = await fetchYouTubePlaylist(
+        input,
+        ac.signal,
+      );
       const seen = new Set(existingIds);
       const fresh = tracks.filter((track) => {
         if (seen.has(track.videoId)) return false;
@@ -41,7 +44,9 @@ export default function AddPlaylist({ existingIds, onAdded }: AddPlaylistProps) 
         setError(
           tracks.length
             ? "Those tracks are already in the queue."
-            : "No playable videos in that playlist.",
+            : blocked
+              ? "None of those videos can be played here — playback on other websites is disabled."
+              : "No playable videos in that playlist.",
         );
         return;
       }
@@ -61,6 +66,11 @@ export default function AddPlaylist({ existingIds, onAdded }: AddPlaylistProps) 
         `Added ${fresh.length} track${fresh.length === 1 ? "" : "s"}`,
       ];
       if (skipped > 0) parts.push(`${skipped} already queued`);
+      if (blocked > 0) {
+        parts.push(
+          `${blocked} blocked — playback on other websites disabled`,
+        );
+      }
       if (truncated) parts.push("stopped at 100");
       setMessage(parts.join(" · "));
       setUrl("");
@@ -102,7 +112,7 @@ export default function AddPlaylist({ existingIds, onAdded }: AddPlaylistProps) 
           className="btn primary"
           disabled={busy || !url.trim() || !youtubeConfigured()}
         >
-          {busy ? "Adding…" : "Add"}
+          {busy ? "Checking tracks…" : "Add"}
         </button>
       </div>
       {!youtubeConfigured() && (
@@ -110,7 +120,8 @@ export default function AddPlaylist({ existingIds, onAdded }: AddPlaylistProps) 
       )}
       {youtubeConfigured() && !message && !error && !busy && (
         <p className="panel-note">
-          Public playlists and Mixes. Adds up to 100 playable tracks.
+          Public playlists and Mixes. Adds up to 100 playable tracks; skips
+          ones that can't play on other websites.
         </p>
       )}
       {message && <p className="admin-status">{message}</p>}

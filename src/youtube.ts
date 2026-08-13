@@ -9,7 +9,10 @@
 //   2. loadYouTubeIframeApi() — lazily injects the IFrame Player API used by the
 //      in-store player to actually play the chosen videos.
 
-import { filterEmbeddableVideoIds } from "./youtubeEmbedProbe";
+import {
+  filterEmbeddableVideoIds,
+  filterPlayableVideoIds,
+} from "./youtubeEmbedProbe";
 
 export interface YouTubeResult {
   videoId: string;
@@ -428,6 +431,7 @@ const MAX_PLAYLIST_ITEMS = 100;
 export type YouTubePlaylistFetch = {
   tracks: YouTubeResult[];
   truncated: boolean;
+  blocked: number;
 };
 
 function uniqueVideoIds(ids: string[]): string[] {
@@ -651,7 +655,7 @@ export async function fetchYouTubePlaylist(
   let ids = await fetchPlaylistItemIds(playlistId, signal);
   if (ids.length === 0) {
     await loadYouTubeIframeApi();
-    if (signal?.aborted) return { tracks: [], truncated: false };
+    if (signal?.aborted) return { tracks: [], truncated: false, blocked: 0 };
     ids = await fetchPlaylistIdsFromPlayer(playlistId, videoId, signal);
   }
 
@@ -673,15 +677,25 @@ export async function fetchYouTubePlaylist(
     { catalog: true },
   );
 
+  const candidates = ids.filter((id) => byId.has(id));
+  const playableIds = new Set<string>();
+  await filterPlayableVideoIds(candidates, signal, (id) => playableIds.add(id));
+  if (signal?.aborted) return { tracks: [], truncated, blocked: 0 };
+
   const tracks = ids
-    .map((id) => byId.get(id))
+    .map((id) => (playableIds.has(id) ? byId.get(id) : undefined))
     .filter((t): t is YouTubeResult => Boolean(t));
+  const blocked = ids.length - tracks.length;
 
   if (tracks.length === 0) {
-    throw new YouTubeError("No playable videos in that playlist.");
+    throw new YouTubeError(
+      blocked
+        ? "None of those videos can be played here — playback on other websites is disabled."
+        : "No playable videos in that playlist.",
+    );
   }
 
-  return { tracks, truncated };
+  return { tracks, truncated, blocked };
 }
 
 function jukeboxThumb(videoId: string): string {
