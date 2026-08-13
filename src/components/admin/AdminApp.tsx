@@ -11,9 +11,10 @@ import {
 } from "../../supabase/api";
 import { usePlaybackHost } from "../../hooks/usePlaybackHost";
 import { eventTitle } from "../../lib/eventName";
-import { fmtTime } from "../../lib/format";
+import { addedBy, fmtTime } from "../../lib/format";
 import { navigate } from "../../lib/route";
 import { playableDuration, useQueue, useSettings } from "../../supabase/hooks";
+import AddPlaylist from "./AddPlaylist";
 import AdminLogin from "./AdminLogin";
 import JukeboxPlayer from "./JukeboxPlayer";
 
@@ -153,7 +154,7 @@ export default function AdminApp() {
               <>
                 <span className="transport-title">{playing.title}</span>
                 <span className="transport-sub">
-                  {playing.visitor?.name ?? "Guest"} · {fmtTime(elapsed)} /{" "}
+                  {addedBy(playing)} · {fmtTime(elapsed)} /{" "}
                   {fmtTime(limit)}
                 </span>
               </>
@@ -233,6 +234,10 @@ export default function AdminApp() {
 
           {section === "queue" && (
             <>
+              <AddPlaylist
+                existingIds={new Set(items.map((item) => item.youtube_id))}
+                onAdded={() => void refresh()}
+              />
               <div className="admin-table-head">
                 <span>No</span>
                 <span />
@@ -255,7 +260,7 @@ export default function AdminApp() {
                     </span>
                     <span className="cell-title">{item.title}</span>
                     <span className="cell-who">
-                      {item.visitor?.name ?? "Guest"}
+                      {addedBy(item)}
                     </span>
                     <span className="cell-len">
                       {fmtTime(playableDuration(item, settings.max_duration_sec))}
@@ -340,7 +345,7 @@ export default function AdminApp() {
                         </span>
                         <span className="cell-title">{item.title}</span>
                         <span className="cell-who">
-                          {item.visitor?.name ?? "Guest"}
+                          {addedBy(item)}
                         </span>
                         <span className="cell-len">
                           {fmtTime(

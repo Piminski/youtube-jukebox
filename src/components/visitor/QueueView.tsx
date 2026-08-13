@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { clearLocalVisitor } from "../../supabase/api";
-import { fmtTime } from "../../lib/format";
+import { addedBy, fmtTime } from "../../lib/format";
 import { playableDuration } from "../../supabase/hooks";
 import type { QueueItem, Settings, Visitor } from "../../supabase/types";
 
@@ -104,7 +104,7 @@ export default function QueueView({
               <div className="np-meta">
                 <span className="np-title">{playing.title}</span>
                 <span className="np-sub">
-                  {playing.visitor?.name ?? "Guest"} · {fmtTime(elapsed)} /{" "}
+                  {addedBy(playing)} · {fmtTime(elapsed)} /{" "}
                   {fmtTime(limit)}
                 </span>
               </div>
@@ -136,7 +136,7 @@ export default function QueueView({
                   {item.thumbnail && <img src={item.thumbnail} alt="" />}
                 </span>
                 <span className="q-title">{item.title}</span>
-                <span className="q-who">{item.visitor?.name ?? "Guest"}</span>
+                <span className="q-who">{addedBy(item)}</span>
                 <span className="q-len">
                   {fmtTime(playableDuration(item, settings.max_duration_sec))}
                 </span>

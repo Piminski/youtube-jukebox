@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import JukeboxPlayer from "../admin/JukeboxPlayer";
 import { useQueue, useSettings, playableDuration } from "../../supabase/hooks";
 import { eventTitle } from "../../lib/eventName";
+import { addedBy } from "../../lib/format";
 
 function elapsedSeconds(startedAt: string | null): number {
   if (!startedAt) return 0;
@@ -84,7 +85,7 @@ export default function DisplayScreen() {
           <>
             <span className="display-title">{playing.title}</span>
             <span className="display-by">
-              Selected by: {playing.visitor?.name ?? "Guest"}
+              Selected by: {addedBy(playing)}
             </span>
           </>
         ) : (

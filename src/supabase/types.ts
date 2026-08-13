@@ -40,5 +40,5 @@ export interface AddVideoInput {
   channel?: string;
   thumbnail?: string;
   duration_sec: number;
-  visitor_id: string;
+  visitor_id?: string | null;
 }

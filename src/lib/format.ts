@@ -1,3 +1,9 @@
+import type { QueueItem } from "../supabase/types";
+
+export function addedBy(item: Pick<QueueItem, "visitor" | "visitor_id">): string {
+  return item.visitor?.name ?? (item.visitor_id ? "Guest" : "Admin");
+}
+
 export function fmtTime(seconds: number): string {
   const s = Math.max(0, Math.floor(seconds));
   const m = Math.floor(s / 60);

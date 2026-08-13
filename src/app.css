@@ -936,6 +936,53 @@ input[type="range"] {
   color: var(--danger);
 }
 
+.admin-playlist {
+  padding: 18px 28px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.admin-playlist-row {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.admin-playlist-row input {
+  flex: 1;
+  min-width: 0;
+  height: 36px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--text);
+  border-radius: 0;
+  padding: 0 14px;
+  font-size: 14px;
+}
+
+.admin-playlist-row input:focus {
+  outline: 1px solid var(--text);
+  outline-offset: -1px;
+}
+
+.admin-playlist-row .btn {
+  flex: none;
+}
+
+.admin-playlist .admin-status {
+  margin: 0;
+}
+
+.yt-embed-probe-host {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
 .admin-table-head {
   display: grid;
   grid-template-columns: 44px 56px 1fr 120px 72px 260px;
@@ -1292,6 +1339,10 @@ input[type="range"] {
   .transport-readouts {
     border-left: 0;
     padding-left: 0;
+  }
+
+  .admin-playlist {
+    padding: 14px 16px 8px;
   }
 
   .admin-table-head {

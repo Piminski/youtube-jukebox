@@ -47,6 +47,42 @@ function extractYoutubeVideoId(input: string): string | null {
   return m?.[1] ?? null;
 }
 
+const PRIVATE_LISTS = new Set(["WL", "LL"]);
+
+/** Watch, playlist, Mix, or raw playlist id. */
+export function parseYoutubePlaylistInput(input: string): {
+  videoId: string | null;
+  playlistId: string | null;
+} {
+  const q = input.trim();
+  if (!q) return { videoId: null, playlistId: null };
+
+  const videoId = extractYoutubeVideoId(q);
+
+  if (/^(PL|UU|FL|OL|RD|TL)[\w-]{6,}$/i.test(q)) {
+    return { videoId, playlistId: q };
+  }
+
+  const fromQuery = (raw: string): string | null => {
+    const m = /(?:[?&]list=)([\w-]+)/.exec(raw);
+    const id = m?.[1] ?? null;
+    return id && !PRIVATE_LISTS.has(id) ? id : null;
+  };
+
+  try {
+    const withProto = /^https?:\/\//i.test(q) ? q : `https://${q}`;
+    const url = new URL(withProto);
+    const list = url.searchParams.get("list");
+    if (list && !PRIVATE_LISTS.has(list)) {
+      return { videoId, playlistId: list };
+    }
+  } catch {
+    /* not a URL */
+  }
+
+  return { videoId, playlistId: fromQuery(q) };
+}
+
 async function throwYouTubeHttpError(
   res: Response,
   fallback: string,
@@ -353,6 +389,267 @@ export async function fetchYouTubeVideos(
   }
 
   return verified;
+}
+
+const MAX_PLAYLIST_ITEMS = 100;
+
+export type YouTubePlaylistFetch = {
+  tracks: YouTubeResult[];
+  truncated: boolean;
+};
+
+function uniqueVideoIds(ids: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const id of ids) {
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+  }
+  return out;
+}
+
+async function fetchPlaylistItemIds(
+  playlistId: string,
+  signal?: AbortSignal,
+): Promise<string[]> {
+  const ids: string[] = [];
+  let pageToken = "";
+
+  do {
+    const params: Record<string, string> = {
+      part: "contentDetails,status",
+      playlistId,
+      maxResults: "50",
+    };
+    if (pageToken) params.pageToken = pageToken;
+
+    const res = await fetch(youtubeV3Url("playlistItems", params), { signal });
+    if (!res.ok) {
+      if (res.status === 404 || res.status === 403) return [];
+      await throwYouTubeHttpError(res, "Couldn't load that playlist.");
+    }
+
+    const data = (await res.json()) as {
+      nextPageToken?: string;
+      items?: {
+        contentDetails?: { videoId?: string };
+        status?: { privacyStatus?: string };
+      }[];
+    };
+
+    for (const it of data.items ?? []) {
+      const id = it.contentDetails?.videoId;
+      if (!id || it.status?.privacyStatus === "private") continue;
+      ids.push(id);
+      if (ids.length >= MAX_PLAYLIST_ITEMS) break;
+    }
+
+    pageToken =
+      ids.length >= MAX_PLAYLIST_ITEMS ? "" : (data.nextPageToken ?? "");
+  } while (pageToken);
+
+  return uniqueVideoIds(ids);
+}
+
+type PlaylistPlayer = {
+  cuePlaylist: (opts: { list: string; listType: string; index?: number }) => void;
+  loadPlaylist: (opts: { list: string; listType: string; index?: number }) => void;
+  getPlaylist: () => string[] | undefined;
+  mute: () => void;
+  pauseVideo: () => void;
+  destroy: () => void;
+};
+
+// Mix / temporary lists (RD, TLGG, …) often return empty from playlistItems.
+// The IFrame player can still expand them via getPlaylist().
+function fetchPlaylistIdsFromPlayer(
+  playlistId: string,
+  videoId: string | null,
+  signal?: AbortSignal,
+): Promise<string[]> {
+  return new Promise((resolve) => {
+    const host = document.createElement("div");
+    host.className = "yt-embed-probe-host";
+    host.setAttribute("aria-hidden", "true");
+    document.body.appendChild(host);
+    const target = document.createElement("div");
+    host.appendChild(target);
+
+    let settled = false;
+    let player: PlaylistPlayer | null = null;
+    let pollId = 0;
+    let boostId = 0;
+    let timeoutId = 0;
+    let lastLen = 0;
+    let stableSince = Date.now();
+    let boosted = false;
+
+    const finish = (ids: string[]) => {
+      if (settled) return;
+      settled = true;
+      window.clearInterval(pollId);
+      window.clearTimeout(boostId);
+      window.clearTimeout(timeoutId);
+      signal?.removeEventListener("abort", onAbort);
+      try {
+        player?.destroy();
+      } catch {
+        /* ignore */
+      }
+      host.remove();
+      resolve(uniqueVideoIds(ids).slice(0, MAX_PLAYLIST_ITEMS));
+    };
+
+    const onAbort = () => finish([]);
+    signal?.addEventListener("abort", onAbort, { once: true });
+
+    const currentIds = (): string[] => {
+      try {
+        return player?.getPlaylist() ?? [];
+      } catch {
+        return [];
+      }
+    };
+
+    const take = () => {
+      const ids = currentIds();
+      if (ids.length !== lastLen) {
+        lastLen = ids.length;
+        stableSince = Date.now();
+      }
+      if (ids.length > 0 && Date.now() - stableSince >= 1800) {
+        finish(ids);
+      }
+    };
+
+    const YT = (
+      window as unknown as {
+        YT: { Player: new (el: Element, opts: unknown) => PlaylistPlayer };
+      }
+    ).YT;
+
+    try {
+      player = new YT.Player(target, {
+        width: "1",
+        height: "1",
+        ...(videoId ? { videoId } : {}),
+        playerVars: {
+          autoplay: 0,
+          controls: 0,
+          disablekb: 1,
+          fs: 0,
+          mute: 1,
+          modestbranding: 1,
+          rel: 0,
+          playsinline: 1,
+          iv_load_policy: 3,
+          enablejsapi: 1,
+          origin: window.location.origin,
+          list: playlistId,
+          listType: "playlist",
+        },
+        events: {
+          onReady: () => {
+            try {
+              player?.mute();
+              player?.cuePlaylist({
+                list: playlistId,
+                listType: "playlist",
+                index: 0,
+              });
+            } catch {
+              /* playerVars may already have the list */
+            }
+            take();
+            pollId = window.setInterval(take, 250);
+            boostId = window.setTimeout(() => {
+              if (settled || boosted || lastLen > 0) return;
+              boosted = true;
+              try {
+                player?.mute();
+                player?.loadPlaylist({
+                  list: playlistId,
+                  listType: "playlist",
+                  index: 0,
+                });
+                player?.mute();
+                player?.pauseVideo();
+              } catch {
+                /* ignore */
+              }
+            }, 2500);
+          },
+          onStateChange: () => {
+            try {
+              player?.mute();
+              player?.pauseVideo();
+            } catch {
+              /* ignore */
+            }
+            take();
+          },
+        },
+      });
+    } catch {
+      finish([]);
+      return;
+    }
+
+    timeoutId = window.setTimeout(() => finish(currentIds()), 10000);
+  });
+}
+
+export async function fetchYouTubePlaylist(
+  input: string,
+  signal?: AbortSignal,
+): Promise<YouTubePlaylistFetch> {
+  const { videoId, playlistId } = parseYoutubePlaylistInput(input);
+  if (!playlistId) {
+    throw new YouTubeError(
+      "Paste a YouTube playlist URL (it should include list=…).",
+    );
+  }
+  if (!API_KEY) {
+    throw new YouTubeError(
+      "YouTube isn't configured. Add VITE_YOUTUBE_API_KEY to enable it.",
+    );
+  }
+
+  let ids = await fetchPlaylistItemIds(playlistId, signal);
+  if (ids.length === 0) {
+    await loadYouTubeIframeApi();
+    if (signal?.aborted) return { tracks: [], truncated: false };
+    ids = await fetchPlaylistIdsFromPlayer(playlistId, videoId, signal);
+  }
+
+  const truncated = ids.length >= MAX_PLAYLIST_ITEMS;
+  ids = ids.slice(0, MAX_PLAYLIST_ITEMS);
+  if (ids.length === 0) {
+    throw new YouTubeError(
+      "Couldn't load that playlist. Private lists and some Mixes can't be read — try a public playlist URL.",
+    );
+  }
+
+  const byId = new Map<string, YouTubeResult>();
+  await fetchYouTubeVideos(
+    ids,
+    signal,
+    (track) => {
+      if (track.durationSec > 0) byId.set(track.videoId, track);
+    },
+    { catalog: true },
+  );
+
+  const tracks = ids
+    .map((id) => byId.get(id))
+    .filter((t): t is YouTubeResult => Boolean(t));
+
+  if (tracks.length === 0) {
+    throw new YouTubeError("No playable videos in that playlist.");
+  }
+
+  return { tracks, truncated };
 }
 
 function jukeboxThumb(videoId: string): string {

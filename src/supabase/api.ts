@@ -99,7 +99,7 @@ export async function addVideo(input: AddVideoInput): Promise<QueueItem> {
     channel: input.channel ?? null,
     thumbnail: input.thumbnail ?? null,
     duration_sec: input.duration_sec,
-    visitor_id: input.visitor_id,
+    visitor_id: input.visitor_id ?? null,
     source: "web",
     status: "queued",
     position,
@@ -124,6 +124,45 @@ export async function addVideo(input: AddVideoInput): Promise<QueueItem> {
 
   throwOnError(error);
   return data as QueueItem;
+}
+
+export async function addVideos(inputs: AddVideoInput[]): Promise<number> {
+  if (inputs.length === 0) return 0;
+  const sb = getSupabase();
+  const { data: maxRow } = await sb
+    .from("queue_items")
+    .select("position")
+    .order("position", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  let position = maxRow?.position ?? 0;
+
+  const rows = inputs.map((input) => ({
+    youtube_id: input.youtube_id,
+    title: input.title,
+    channel: input.channel ?? null,
+    thumbnail: input.thumbnail ?? null,
+    duration_sec: Math.max(1, input.duration_sec),
+    visitor_id: input.visitor_id ?? null,
+    source: "web" as const,
+    status: "queued" as const,
+    position: ++position,
+  }));
+
+  const insert = (payload: typeof rows) => sb.from("queue_items").insert(payload);
+  let { error } = await insert(rows);
+  const capMatch = error?.message.match(/exceeds maximum duration of (\d+) seconds/i);
+  if (error && capMatch) {
+    const cap = Math.max(1, Number(capMatch[1]));
+    ({ error } = await insert(
+      rows.map((row) => ({
+        ...row,
+        duration_sec: Math.min(row.duration_sec, cap),
+      })),
+    ));
+  }
+  throwOnError(error);
+  return rows.length;
 }
 
 export async function setItemStatus(
