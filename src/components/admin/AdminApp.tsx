@@ -9,6 +9,7 @@ import {
   updateSettings,
 } from "../../supabase/api";
 import { usePlaybackHost } from "../../hooks/usePlaybackHost";
+import { EVENT_NAME } from "../../lib/eventName";
 import { fmtTime } from "../../lib/format";
 import { navigate } from "../../lib/route";
 import { playableDuration, useQueue, useSettings } from "../../supabase/hooks";
@@ -16,6 +17,16 @@ import AdminLogin from "./AdminLogin";
 import JukeboxPlayer from "./JukeboxPlayer";
 
 type Section = "queue" | "controls" | "settings";
+
+const NAV: ReadonlyArray<readonly [Section, string, string]> = [
+  ["queue", "Queue", "01"],
+  ["controls", "Playback", "02"],
+  ["settings", "Settings", "03"],
+];
+
+function pad2(n: number): string {
+  return String(n).padStart(2, "0");
+}
 
 export default function AdminApp() {
   const [authed, setAuthed] = useState<boolean | null>(null);
@@ -38,11 +49,7 @@ export default function AdminApp() {
   }, [playing, queued]);
 
   if (authed === null) {
-    return (
-      <div className="shell admin-shell">
-        <p className="muted">Checking session…</p>
-      </div>
-    );
+    return <div className="admin-loading">Checking session…</div>;
   }
 
   if (!authed) {
@@ -70,7 +77,7 @@ export default function AdminApp() {
     : 0;
 
   return (
-    <div className={`admin-shell${section === "controls" ? " playback" : ""}`}>
+    <div className={`admin-screen${section === "controls" ? " playback" : ""}`}>
       <JukeboxPlayer
         videoId={playing?.youtube_id ?? null}
         volume={settings.volume}
@@ -85,276 +92,325 @@ export default function AdminApp() {
         trackKey={playing?.id}
       />
 
-      <aside className="admin-nav">
+      <aside className="admin-side">
         <div className="admin-brand">
-          <strong>Jukebox</strong>
-          <span>Admin</span>
+          <span className="brand-pixel">JUKEBOX</span>
+          <span className="admin-brand-sub">Admin</span>
         </div>
-        {(
-          [
-            ["queue", "Queue"],
-            ["controls", "Playback"],
-            ["settings", "Settings"],
-          ] as const
-        ).map(([id, label]) => (
+        <nav className="admin-nav">
+          {NAV.map(([id, label, no]) => (
+            <button
+              key={id}
+              type="button"
+              className={`admin-nav-item${section === id ? " active" : ""}`}
+              onClick={() => setSection(id)}
+            >
+              <span className="no">{no}</span>
+              {label}
+            </button>
+          ))}
+        </nav>
+        <div className="admin-side-links">
           <button
-            key={id}
             type="button"
-            className={section === id ? "active" : ""}
-            onClick={() => setSection(id)}
+            className="linklike"
+            onClick={() => window.open("/display", "_blank")}
           >
-            {label}
+            Open display ↗
           </button>
-        ))}
-        <button
-          type="button"
-          className="ghost"
-          onClick={() => window.open("/display", "_blank")}
-        >
-          Open display
-        </button>
-        <button
-          type="button"
-          className="ghost"
-          onClick={() => {
-            void adminSignOut().then(() => setAuthed(false));
-          }}
-        >
-          Sign out
-        </button>
-        <button type="button" className="ghost" onClick={() => navigate("visitor")}>
-          Visitor site
-        </button>
+          <button
+            type="button"
+            className="linklike"
+            onClick={() => navigate("visitor")}
+          >
+            Visitor site ↗
+          </button>
+          <button
+            type="button"
+            className="linklike"
+            onClick={() => {
+              void adminSignOut().then(() => setAuthed(false));
+            }}
+          >
+            Sign out
+          </button>
+        </div>
       </aside>
 
-      <main className="admin-main app-scroll">
-        {error && <p className="form-error">{error}</p>}
-        {loading && <p className="muted">Loading…</p>}
+      <main className="admin-main">
+        <div className="transport">
+          <span
+            className={`transport-dot${playing && !settings.paused ? " live" : ""}`}
+          />
+          <div className="transport-meta">
+            {playing ? (
+              <>
+                <span className="transport-title">{playing.title}</span>
+                <span className="transport-sub">
+                  {playing.visitor?.name ?? "Guest"} · {fmtTime(elapsed)} /{" "}
+                  {fmtTime(limit)}
+                </span>
+              </>
+            ) : (
+              <span className="transport-sub">Nothing playing</span>
+            )}
+          </div>
+          <div className="transport-buttons">
+            <button
+              type="button"
+              className="btn primary"
+              onClick={() => {
+                void updateSettings({ paused: !settings.paused }).then((s) => {
+                  setSettings(s);
+                });
+              }}
+            >
+              {settings.paused ? "Resume ▶" : "Pause ▮▮"}
+            </button>
+            <button
+              type="button"
+              className="btn"
+              disabled={!playing}
+              onClick={() => {
+                void advanceQueue(playing?.id ?? null).then(() => refresh());
+              }}
+            >
+              Skip ≫
+            </button>
+          </div>
+          <div className="transport-readouts">
+            <span className="mono-label">
+              Vol {Math.round(settings.volume * 100)}
+            </span>
+            <div className="meter">
+              <div style={{ width: `${Math.round(settings.volume * 100)}%` }} />
+            </div>
+            <span className="mono-label max">
+              Max {fmtTime(settings.max_duration_sec)}
+            </span>
+          </div>
+        </div>
 
-        {section === "queue" && (
-          <section className="admin-panel">
-            <header className="admin-panel-head">
-              <h1>Queue</h1>
-              <p className="muted">{items.length} active · hidden {hidden.length}</p>
-            </header>
+        <div className="admin-content app-scroll">
+          {error && <p className="admin-status error">{error}</p>}
+          {loading && <p className="admin-status">Loading…</p>}
 
-            <ul className="admin-track-list">
-              {orderedActive.map((item, index) => (
-                <li key={item.id} className={item.status === "playing" ? "playing" : ""}>
-                  <img src={item.thumbnail ?? undefined} alt="" />
-                  <div className="meta">
-                    <strong>{item.title}</strong>
-                    <span>
-                      {item.visitor?.name ?? "Guest"} ·{" "}
-                      {fmtTime(playableDuration(item, settings.max_duration_sec))}
-                      {item.status === "playing" ? " · now" : ` · #${index + 1}`}
+          {section === "queue" && (
+            <>
+              <div className="admin-table-head">
+                <span>No</span>
+                <span />
+                <span>Title</span>
+                <span>Added by</span>
+                <span className="r">Len</span>
+                <span className="r">Actions</span>
+              </div>
+              <ul className="admin-table">
+                {orderedActive.map((item, index) => (
+                  <li
+                    key={item.id}
+                    className={item.status === "playing" ? "playing" : ""}
+                  >
+                    <span className="cell-no">
+                      {item.status === "playing" ? "▶" : pad2(index + 1)}
                     </span>
-                  </div>
-                  <div className="actions">
-                    <button
-                      type="button"
-                      disabled={busyId === item.id || index === 0}
-                      onClick={() => void move(item.id, -1)}
-                    >
-                      Up
-                    </button>
-                    <button
-                      type="button"
-                      disabled={busyId === item.id || index === orderedActive.length - 1}
-                      onClick={() => void move(item.id, 1)}
-                    >
-                      Down
-                    </button>
-                    {item.status !== "playing" && (
+                    <span className="q-thumb">
+                      {item.thumbnail && <img src={item.thumbnail} alt="" />}
+                    </span>
+                    <span className="cell-title">{item.title}</span>
+                    <span className="cell-who">
+                      {item.visitor?.name ?? "Guest"}
+                    </span>
+                    <span className="cell-len">
+                      {fmtTime(playableDuration(item, settings.max_duration_sec))}
+                    </span>
+                    <span className="cell-actions">
+                      <button
+                        type="button"
+                        disabled={busyId === item.id || index === 0}
+                        onClick={() => void move(item.id, -1)}
+                        aria-label="Move up"
+                      >
+                        ↑
+                      </button>
+                      <button
+                        type="button"
+                        disabled={
+                          busyId === item.id ||
+                          index === orderedActive.length - 1
+                        }
+                        onClick={() => void move(item.id, 1)}
+                        aria-label="Move down"
+                      >
+                        ↓
+                      </button>
+                      {item.status === "playing" ? (
+                        <span className="now-tag">Now</span>
+                      ) : (
+                        <button
+                          type="button"
+                          className="play"
+                          onClick={() => {
+                            setBusyId(item.id);
+                            void playNow(item.id)
+                              .then(() => refresh())
+                              .finally(() => setBusyId(null));
+                          }}
+                        >
+                          Play
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={() => {
                           setBusyId(item.id);
-                          void playNow(item.id)
+                          const wasPlaying = item.status === "playing";
+                          void setItemStatus(item.id, "hidden")
+                            .then(() => (wasPlaying ? advanceQueue(null) : undefined))
                             .then(() => refresh())
                             .finally(() => setBusyId(null));
                         }}
                       >
-                        Play
+                        Hide
                       </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setBusyId(item.id);
-                        const wasPlaying = item.status === "playing";
-                        void setItemStatus(item.id, "hidden")
-                          .then(() => (wasPlaying ? advanceQueue(null) : undefined))
-                          .then(() => refresh())
-                          .finally(() => setBusyId(null));
-                      }}
-                    >
-                      Hide
-                    </button>
-                    <button
-                      type="button"
-                      className="danger"
-                      onClick={() => {
-                        setBusyId(item.id);
-                        const wasPlaying = item.status === "playing";
-                        void setItemStatus(item.id, "removed")
-                          .then(() => (wasPlaying ? advanceQueue(null) : undefined))
-                          .then(() => refresh())
-                          .finally(() => setBusyId(null));
-                      }}
-                    >
-                      Delete
-                    </button>
-                  </div>
-                </li>
-              ))}
-            </ul>
+                      <button
+                        type="button"
+                        className="danger"
+                        onClick={() => {
+                          setBusyId(item.id);
+                          const wasPlaying = item.status === "playing";
+                          void setItemStatus(item.id, "removed")
+                            .then(() => (wasPlaying ? advanceQueue(null) : undefined))
+                            .then(() => refresh())
+                            .finally(() => setBusyId(null));
+                        }}
+                      >
+                        Del
+                      </button>
+                    </span>
+                  </li>
+                ))}
+              </ul>
 
-            {hidden.length > 0 && (
-              <>
-                <h2>Hidden</h2>
-                <ul className="admin-track-list">
-                  {hidden.map((item) => (
-                    <li key={item.id}>
-                      <img src={item.thumbnail ?? undefined} alt="" />
-                      <div className="meta">
-                        <strong>{item.title}</strong>
-                        <span>Hidden</span>
-                      </div>
-                      <div className="actions">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            void setItemStatus(item.id, "queued").then(() => refresh());
-                          }}
-                        >
-                          Unhide
-                        </button>
-                        <button
-                          type="button"
-                          className="danger"
-                          onClick={() => {
-                            void setItemStatus(item.id, "removed").then(() => refresh());
-                          }}
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              </>
-            )}
-          </section>
-        )}
-
-        {section === "controls" && (
-          <section className="admin-panel">
-            <header className="admin-panel-head">
-              <h1>Playback</h1>
-              <p className="muted">Room audio and picture play on the display screen.</p>
-            </header>
-
-            <div className="now-card">
-              {playing ? (
+              {hidden.length > 0 && (
                 <>
-                  <img src={playing.thumbnail ?? undefined} alt="" />
-                  <div>
-                    <h2>{playing.title}</h2>
-                    <p>
-                      {fmtTime(elapsed)} / {fmtTime(limit)}
-                      {settings.paused ? " · paused" : ""}
-                    </p>
-                  </div>
+                  <div className="admin-subhead mono-label">Hidden</div>
+                  <ul className="admin-table">
+                    {hidden.map((item) => (
+                      <li key={item.id}>
+                        <span className="cell-no">—</span>
+                        <span className="q-thumb">
+                          {item.thumbnail && <img src={item.thumbnail} alt="" />}
+                        </span>
+                        <span className="cell-title">{item.title}</span>
+                        <span className="cell-who">
+                          {item.visitor?.name ?? "Guest"}
+                        </span>
+                        <span className="cell-len">
+                          {fmtTime(
+                            playableDuration(item, settings.max_duration_sec),
+                          )}
+                        </span>
+                        <span className="cell-actions">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              void setItemStatus(item.id, "queued").then(() =>
+                                refresh(),
+                              );
+                            }}
+                          >
+                            Unhide
+                          </button>
+                          <button
+                            type="button"
+                            className="danger"
+                            onClick={() => {
+                              void setItemStatus(item.id, "removed").then(() =>
+                                refresh(),
+                              );
+                            }}
+                          >
+                            Del
+                          </button>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
                 </>
-              ) : (
-                <p className="empty">Nothing in the queue.</p>
               )}
-            </div>
+            </>
+          )}
 
-            <div className="control-row">
-              <button
-                type="button"
-                className="btn primary"
-                onClick={() => {
-                  void updateSettings({ paused: !settings.paused }).then((s) => {
-                    setSettings(s);
-                  });
-                }}
-              >
-                {settings.paused ? "Resume" : "Pause"}
-              </button>
-              <button
-                type="button"
-                className="btn"
-                disabled={!playing}
-                onClick={() => {
-                  void advanceQueue(playing?.id ?? null).then(() => refresh());
-                }}
-              >
-                Skip
-              </button>
-            </div>
+          {section === "controls" && (
+            <section className="admin-panel">
+              <label className="slider-label">
+                Volume {Math.round(settings.volume * 100)}
+                <input
+                  type="range"
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  value={settings.volume}
+                  onChange={(e) => {
+                    const volume = Number(e.target.value);
+                    setSettings({ ...settings, volume });
+                    void updateSettings({ volume });
+                  }}
+                />
+              </label>
+              <p className="panel-note">
+                Room audio and picture play on the display screen.
+              </p>
+            </section>
+          )}
 
-            <label className="slider-label">
-              Volume ({Math.round(settings.volume * 100)}%)
-              <input
-                type="range"
-                min={0}
-                max={1}
-                step={0.01}
-                value={settings.volume}
-                onChange={(e) => {
-                  const volume = Number(e.target.value);
-                  setSettings({ ...settings, volume });
-                  void updateSettings({ volume });
-                }}
-              />
-            </label>
-          </section>
-        )}
+          {section === "settings" && (
+            <section className="admin-panel">
+              <label className="slider-label">
+                Max play duration {fmtTime(settings.max_duration_sec)}
+                <input
+                  type="range"
+                  min={60}
+                  max={900}
+                  step={15}
+                  value={settings.max_duration_sec}
+                  onChange={(e) => {
+                    const max_duration_sec = Number(e.target.value);
+                    setSettings({ ...settings, max_duration_sec });
+                  }}
+                  onMouseUp={() => {
+                    void updateSettings({
+                      max_duration_sec: settings.max_duration_sec,
+                    }).then((s) => {
+                      setSettings(s);
+                      void refreshSettings();
+                    });
+                  }}
+                  onTouchEnd={() => {
+                    void updateSettings({
+                      max_duration_sec: settings.max_duration_sec,
+                    }).then((s) => {
+                      setSettings(s);
+                      void refreshSettings();
+                    });
+                  }}
+                />
+              </label>
+              <p className="panel-note">
+                Any video can be added. Playback stops at this length, then the
+                queue advances.
+              </p>
+            </section>
+          )}
+        </div>
 
-        {section === "settings" && (
-          <section className="admin-panel">
-            <header className="admin-panel-head">
-              <h1>Settings</h1>
-            </header>
-            <label className="slider-label">
-              Max play duration ({fmtTime(settings.max_duration_sec)})
-              <input
-                type="range"
-                min={60}
-                max={900}
-                step={15}
-                value={settings.max_duration_sec}
-                onChange={(e) => {
-                  const max_duration_sec = Number(e.target.value);
-                  setSettings({ ...settings, max_duration_sec });
-                }}
-                onMouseUp={() => {
-                  void updateSettings({
-                    max_duration_sec: settings.max_duration_sec,
-                  }).then((s) => {
-                    setSettings(s);
-                    void refreshSettings();
-                  });
-                }}
-                onTouchEnd={() => {
-                  void updateSettings({
-                    max_duration_sec: settings.max_duration_sec,
-                  }).then((s) => {
-                    setSettings(s);
-                    void refreshSettings();
-                  });
-                }}
-              />
-            </label>
-            <p className="muted">
-              Any video can be added. Playback stops at this length, then the
-              queue advances.
-            </p>
-          </section>
-        )}
+        <div className="admin-foot">
+          <span>
+            Event: {EVENT_NAME} · {items.length} active · {hidden.length} hidden
+          </span>
+          <span>Supabase realtime · {error ? "Offline" : "Connected"}</span>
+        </div>
       </main>
     </div>
   );

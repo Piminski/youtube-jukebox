@@ -151,16 +151,21 @@ export default function AddVideo({
   };
 
   return (
-    <div className="shell visitor-shell">
-      <header className="page-head">
-        <button type="button" className="btn ghost" onClick={onBack}>
-          Queue
+    <div className="visitor-screen">
+      <header className="topbar">
+        <span className="brand-pixel">JUKEBOX</span>
+        <button type="button" className="linklike" onClick={onBack}>
+          ← Queue
         </button>
-        <h1>Add a video</h1>
-        <p className="muted">Search YouTube or pick a track</p>
       </header>
 
-      <div className="jukebox-search">
+      <div className="greeting">
+        <h1>Add a video.</h1>
+        <p className="status-line">Search YouTube or pick a track</p>
+      </div>
+
+      <div className="addvideo-body">
+        <div className="jukebox-search">
         <Search className="jukebox-search-icon" size={18} />
         <input
           value={query}
@@ -212,35 +217,36 @@ export default function AddVideo({
         ))}
       </div>
 
-      {selected && (
-        <div className="selected-panel">
-          <JukeboxPreview
-            videoId={selected.videoId}
-            playing={previewing}
-            title={selected.title}
-            channel={selected.channel}
-            thumbnail={selected.thumbnail}
-          />
-          <div className="selected-actions">
-            <button
-              type="button"
-              className="btn ghost"
-              onClick={() => setPreviewing((p) => !p)}
-            >
-              {previewing ? "Stop preview" : "Preview"}
-            </button>
-            <button
-              type="button"
-              className="btn primary"
-              disabled={busy}
-              onClick={() => void publish()}
-            >
-              {busy ? "Adding…" : "Add to queue"}
-            </button>
+        {selected && (
+          <div className="selected-panel">
+            <JukeboxPreview
+              videoId={selected.videoId}
+              playing={previewing}
+              title={selected.title}
+              channel={selected.channel}
+              thumbnail={selected.thumbnail}
+            />
+            <div className="selected-actions">
+              <button
+                type="button"
+                className="btn"
+                onClick={() => setPreviewing((p) => !p)}
+              >
+                {previewing ? "Stop preview" : "Preview"}
+              </button>
+              <button
+                type="button"
+                className="btn primary"
+                disabled={busy}
+                onClick={() => void publish()}
+              >
+                {busy ? "Adding…" : "Add to queue"}
+              </button>
+            </div>
+            {error && <p className="form-error">{error}</p>}
           </div>
-          {error && <p className="form-error">{error}</p>}
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }

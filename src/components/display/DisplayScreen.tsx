@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import JukeboxPlayer from "../admin/JukeboxPlayer";
 import { useQueue, useSettings, playableDuration } from "../../supabase/hooks";
-import { fmtTime } from "../../lib/format";
+import { EVENT_NAME } from "../../lib/eventName";
 
 function elapsedSeconds(startedAt: string | null): number {
   if (!startedAt) return 0;
@@ -28,7 +28,7 @@ async function requestFullscreen(el: HTMLElement) {
 export default function DisplayScreen() {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const { settings } = useSettings();
-  const { playing, queued, loading } = useQueue();
+  const { playing, loading } = useQueue();
   const [audioUnlocked, setAudioUnlocked] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const limit = playing ? playableDuration(playing, settings.max_duration_sec) : 0;
@@ -54,62 +54,44 @@ export default function DisplayScreen() {
   };
 
   return (
-    <div ref={rootRef} className={`display-screen${isFullscreen ? " fullscreen" : ""}`}>
-      {playing?.thumbnail && (
-        <div
-          className="display-bg"
-          style={{ backgroundImage: `url(${playing.thumbnail})` }}
-          aria-hidden
+    <div
+      ref={rootRef}
+      className={`display-screen${isFullscreen ? " fullscreen" : ""}`}
+    >
+      <div className="display-top">
+        <span className="display-event">{EVENT_NAME}</span>
+        {settings.paused && <span className="display-paused">Paused</span>}
+      </div>
+
+      <div className="display-stage">
+        <JukeboxPlayer
+          videoId={playing?.youtube_id ?? null}
+          volume={settings.volume}
+          stage={Boolean(playing)}
+          paused={settings.paused}
+          startSeconds={startSeconds}
+          trackKey={playing?.id}
         />
-      )}
+        {!playing && (
+          <span className="display-idle">
+            {loading ? "Connecting…" : "Queue is open — add a track"}
+          </span>
+        )}
+      </div>
 
-      <JukeboxPlayer
-        videoId={playing?.youtube_id ?? null}
-        volume={settings.volume}
-        stage={Boolean(playing)}
-        paused={settings.paused}
-        startSeconds={startSeconds}
-        trackKey={playing?.id}
-      />
-
-      <div className={`display-overlay${playing ? " playing" : ""}`}>
-        {settings.paused && <p className="display-paused">Paused</p>}
-
-        <section className="display-now">
-          {playing ? (
-            <>
-              <p className="eyebrow">Now playing</p>
-              <h1>{playing.title}</h1>
-              <p className="display-meta">
-                {playing.visitor?.name ?? "Guest"}
-                {playing.channel ? ` · ${playing.channel}` : ""}
-                {" · "}
-                {fmtTime(limit)}
-              </p>
-            </>
-          ) : (
-            <>
-              <p className="eyebrow">Live queue</p>
-              <h1>{loading ? "Connecting…" : "Add a track to start the night"}</h1>
-            </>
-          )}
-        </section>
-
-        <section className="display-upnext">
-          <h2>Up next</h2>
-          {queued.length === 0 ? (
-            <p className="empty">Queue is open</p>
-          ) : (
-            <ol>
-              {queued.slice(0, 6).map((item) => (
-                <li key={item.id}>
-                  <span className="title">{item.title}</span>
-                  <span className="who">{item.visitor?.name ?? "Guest"}</span>
-                </li>
-              ))}
-            </ol>
-          )}
-        </section>
+      <div className="display-bottom">
+        {playing ? (
+          <>
+            <span className="display-title">{playing.title}</span>
+            <span className="display-by">
+              Selected by: {playing.visitor?.name ?? "Guest"}
+            </span>
+          </>
+        ) : (
+          <span className="display-title" aria-hidden>
+            &nbsp;
+          </span>
+        )}
       </div>
 
       {!audioUnlocked && (

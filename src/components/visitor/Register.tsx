@@ -31,14 +31,18 @@ export default function Register({ onRegistered }: RegisterProps) {
   };
 
   return (
-    <div className="shell visitor-shell">
-      <header className="brand-block">
-        <p className="eyebrow">Live event</p>
-        <h1>YouTube Jukebox</h1>
-        <p className="lede">
-          Register to browse the queue and add a track for the room.
-        </p>
+    <div className="visitor-screen">
+      <header className="topbar">
+        <span className="brand-pixel">JUKEBOX</span>
+        <span className="mono-label accent">Live event</span>
       </header>
+
+      <div className="greeting">
+        <h1>Join the jukebox.</h1>
+        <p className="status-line">
+          Register to browse the queue and add a track
+        </p>
+      </div>
 
       <form className="card-form" onSubmit={submit}>
         <label>
