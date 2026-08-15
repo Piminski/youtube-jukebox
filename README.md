@@ -10,11 +10,12 @@ removed and `localStorage` replaced by **Supabase Realtime**.
 
 ## Surfaces
 
-| URL | Role |
-| --- | --- |
-| `/` | Visitor — register, view queue, add videos |
-| `/admin` | Staff — reorder, hide, delete, pause/skip, max play duration |
-| `/display` | Public screen — video + room audio, now playing, up next |
+| URL | Title | Role |
+| --- | --- | --- |
+| `/` | Playlist | Visitor — register, view queue |
+| `/search` | Search | Visitor — search YouTube and add videos |
+| `/admin` | Admin | Staff — reorder, hide, delete, pause/skip, max play duration |
+| `/display` | Display | Public screen — video + room audio, now playing, up next |
 
 The **display** is the audio/video host (YouTube IFrame). Open `/display` fullscreen
 on the venue screen and click once to unlock sound. Admin volume/pause/skip still

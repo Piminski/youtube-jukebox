@@ -157,9 +157,9 @@ export default function AdminApp() {
           <button
             type="button"
             className="linklike"
-            onClick={() => navigate("visitor")}
+            onClick={() => navigate("playlist")}
           >
-            Visitor site ↗
+            Playlist ↗
           </button>
           <button
             type="button"

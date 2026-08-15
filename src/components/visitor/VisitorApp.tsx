@@ -1,22 +1,28 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   clearLocalVisitor,
   loadLocalVisitor,
 } from "../../supabase/api";
 import { useQueue, useSettings } from "../../supabase/hooks";
 import type { Visitor } from "../../supabase/types";
+import { navigate } from "../../lib/route";
 import AddVideo from "./AddVideo";
 import QueueView from "./QueueView";
 import Register from "./Register";
 
-type View = "queue" | "add";
+interface VisitorAppProps {
+  view: "queue" | "add";
+}
 
-export default function VisitorApp() {
+export default function VisitorApp({ view }: VisitorAppProps) {
   const [visitor, setVisitor] = useState<Visitor | null>(() => loadLocalVisitor());
-  const [view, setView] = useState<View>("queue");
-  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(view === "add");
   const { settings, error: settingsError } = useSettings();
   const { playing, queued, loading, error, refresh } = useQueue();
+
+  useEffect(() => {
+    if (view === "add") setSearchOpen(true);
+  }, [view]);
 
   if (!visitor) {
     return <Register onRegistered={setVisitor} />;
@@ -34,13 +40,13 @@ export default function VisitorApp() {
           error={error || settingsError}
           onAdd={() => {
             setSearchOpen(true);
-            setView("add");
+            navigate("search");
           }}
           onSignOut={() => {
             clearLocalVisitor();
             setVisitor(null);
-            setView("queue");
             setSearchOpen(false);
+            navigate("playlist");
           }}
         />
       </div>
@@ -48,7 +54,7 @@ export default function VisitorApp() {
         <div hidden={view !== "add"}>
           <AddVideo
             visitor={visitor}
-            onBack={() => setView("queue")}
+            onBack={() => navigate("playlist")}
             onAdded={() => {
               void refresh();
             }}

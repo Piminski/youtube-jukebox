@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import AdminApp from "./components/admin/AdminApp";
 import DisplayScreen from "./components/display/DisplayScreen";
 import VisitorApp from "./components/visitor/VisitorApp";
-import { parseRoute, type AppRoute } from "./lib/route";
+import { parseRoute, ROUTE_TITLES, type AppRoute } from "./lib/route";
 import { supabaseConfigured } from "./supabase/client";
 
 export default function App() {
@@ -13,6 +13,10 @@ export default function App() {
     window.addEventListener("popstate", onNav);
     return () => window.removeEventListener("popstate", onNav);
   }, []);
+
+  useEffect(() => {
+    document.title = ROUTE_TITLES[route];
+  }, [route]);
 
   if (!supabaseConfigured() && route !== "display") {
     return (
@@ -31,5 +35,5 @@ export default function App() {
 
   if (route === "admin") return <AdminApp />;
   if (route === "display") return <DisplayScreen />;
-  return <VisitorApp />;
+  return <VisitorApp view={route === "search" ? "add" : "queue"} />;
 }

@@ -33,9 +33,9 @@ export default function AdminLogin({ onSignedIn }: AdminLoginProps) {
         <button
           type="button"
           className="linklike"
-          onClick={() => navigate("visitor")}
+          onClick={() => navigate("playlist")}
         >
-          ← Visitor site
+          ← Playlist
         </button>
       </header>
 
